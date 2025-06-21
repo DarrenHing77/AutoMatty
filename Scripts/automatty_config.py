@@ -29,26 +29,21 @@ class AutoMattyUtils:
     @staticmethod
     def get_user_path(prompt_text, default_path):
         """Get path from user with default fallback"""
-        # UE doesn't have great input dialogs, so we'll use a simple approach
-        # In a real plugin, you'd want a proper UI for this
-        return default_path  # For now, return default - can be enhanced with UI
+        return default_path  # For now, return default
     
     @staticmethod
     def is_substrate_enabled():
         """Check if Substrate material system is enabled"""
         try:
-            # Try to get the Substrate settings
-            settings = unreal.get_default_object(unreal.RendererSettings)
-            if hasattr(settings, 'r_substrate'):
-                return settings.r_substrate
-            
-            # Alternative: try creating a substrate node to test
-            temp_mat = unreal.MaterialEditingLibrary.create_material_expression(
-                None, unreal.MaterialExpressionSubstrateSlabBSDF, 0, 0
+            # Try creating a substrate node to test
+            temp_mat = unreal.Material()
+            lib = unreal.MaterialEditingLibrary
+            temp_node = lib.create_material_expression(
+                temp_mat, unreal.MaterialExpressionSubstrateSlabBSDF, 0, 0
             )
-            return temp_mat is not None
+            return temp_node is not None
         except:
-            unreal.log_warning("⚠️ Could not determine Substrate status - assuming enabled")
+            unreal.log_warning("Could not determine Substrate status - assuming enabled")
             return True
     
     @staticmethod
@@ -70,7 +65,7 @@ class AutoMattyUtils:
         for path in unreal.EditorAssetLibrary.list_assets("/Engine", recursive=True, include_folder=False):
             if path.lower().endswith("defaultnormal"):
                 return unreal.EditorAssetLibrary.load_asset(path)
-        unreal.log_warning("⚠️ Couldn't find DefaultNormal in /Engine")
+        unreal.log_warning("Could not find DefaultNormal in /Engine")
         return None
     
     @staticmethod
@@ -81,25 +76,6 @@ class AutoMattyUtils:
         
         func_path = f"{search_path}/{func_name}"
         return unreal.EditorAssetLibrary.does_asset_exist(func_path)
-    
-    @staticmethod
-    def get_selected_textures():
-        """Get currently selected Texture2D assets"""
-        selected = unreal.EditorUtilityLibrary.get_selected_assets()
-        return [asset for asset in selected if isinstance(asset, unreal.Texture2D)]
-    
-    @staticmethod
-    def asset_exists_in_project(asset_name, search_path):
-        """Check if an asset with this name already exists"""
-        full_path = f"{search_path}/{asset_name}"
-        return unreal.EditorAssetLibrary.does_asset_exist(full_path)
-    
-    @staticmethod
-    def prompt_user_choice(message, choices=["Yes", "No"]):
-        """Simple user choice prompt - would be better with proper UI"""
-        # For now, just log and return default
-        unreal.log(f"USER CHOICE NEEDED: {message}")
-        return choices[0]  # Default to first choice
     
     @staticmethod
     def match_textures_to_params(textures, patterns=None):
@@ -113,7 +89,7 @@ class AutoMattyUtils:
             for param, pattern in patterns.items():
                 if param not in found and pattern.search(name):
                     found[param] = tex
-                    unreal.log(f"🔗 Matched '{tex.get_name()}' → {param}")
+                    unreal.log(f"Matched '{tex.get_name()}' -> {param}")
                     break
         
         return found

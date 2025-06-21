@@ -1,15 +1,19 @@
 import unreal
 import os
-from automatty_config import AutoMattyConfig, AutoMattyUtils
 
 def create_material_instance_smart():
     """
-    Enhanced material instance creator that:
-    - Uses selected textures if available
-    - Handles existing textures properly
-    - Supports user path input
-    - Checks for conflicts
+    Enhanced material instance creator using modular config
     """
+    
+    # Set up imports after path configuration
+    import sys
+    proj_dir = unreal.Paths.project_dir()
+    scripts_path = os.path.join(proj_dir, "Plugins", "AutoMatty", "Scripts")
+    if scripts_path not in sys.path:
+        sys.path.append(scripts_path)
+    
+    from automatty_config import AutoMattyConfig, AutoMattyUtils
     
     # 1) Validate selected material
     selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()
@@ -21,149 +25,68 @@ def create_material_instance_smart():
     
     base_mat = materials[0]
     unreal.log(f"🔧 Base material: {base_mat.get_name()}")
+
+    # 2) Use config for paths
+    texture_path = AutoMattyConfig.DEFAULT_TEXTURE_PATH
+    material_path = AutoMattyConfig.DEFAULT_MATERIAL_PATH
     
-    # 2) Check for already selected textures
-    selected_textures = AutoMattyUtils.get_selected_textures()
-    
-    if selected_textures:
-        unreal.log(f"📦 Found {len(selected_textures)} selected textures")
-        textures_to_use = selected_textures
-        import_needed = False
-    else:
-        unreal.log("📁 No textures selected - will prompt for import")
-        import_needed = True
-    
-    # 3) Get destination paths (could be enhanced with proper UI)
-    texture_path = AutoMattyUtils.get_user_path(
-        "Texture destination:", 
-        AutoMattyConfig.DEFAULT_TEXTURE_PATH
-    )
-    
-    material_path = AutoMattyUtils.get_user_path(
-        "Material instance destination:",
-        AutoMattyConfig.DEFAULT_MATERIAL_PATH
-    )
-    
-    # 4) Handle texture import if needed
-    if import_needed:
-        textures_to_use = handle_texture_import(texture_path)
-        if not textures_to_use:
-            unreal.log("⚠️ No textures to work with. Aborting.")
-            return
-    
-    # 5) Match textures to parameters
-    matched_textures = AutoMattyUtils.match_textures_to_params(textures_to_use)
+    # 3) Import textures with dialog
+    atools = unreal.AssetToolsHelpers.get_asset_tools()
+    imported = atools.import_assets_with_dialog(texture_path)
+    if not imported:
+        unreal.log("⚠️ No assets imported. Aborting.")
+        return
+
+    # 4) Filter to just textures
+    textures = [obj for obj in imported if isinstance(obj, unreal.Texture2D)]
+    if not textures:
+        unreal.log_warning("⚠️ No textures imported.")
+        return
+
+    # 5) Use config utility to match textures
+    matched_textures = AutoMattyUtils.match_textures_to_params(textures)
     
     if not matched_textures:
         unreal.log_warning("⚠️ No matching textures found for material parameters.")
         return
-    
-    # 6) Determine material workflow
-    workflow = determine_workflow(matched_textures)
-    unreal.log(f"🎯 Detected workflow: {workflow}")
-    
-    # 7) Create the material instance
-    instance = create_instance(base_mat, material_path)
-    if not instance:
-        return
-    
-    # 8) Apply textures to instance
-    apply_textures_to_instance(instance, matched_textures, workflow)
-    
-    # 9) Save and finish
-    unreal.EditorAssetLibrary.save_asset(instance.get_path_name())
-    unreal.log(f"🎉 Material instance created: {instance.get_name()}")
 
-def handle_texture_import(dest_path):
-    """Handle texture importing with conflict resolution"""
-    atools = unreal.AssetToolsHelpers.get_asset_tools()
-    
-    # Import with dialog
-    imported = atools.import_assets_with_dialog(dest_path)
-    if not imported:
-        return []
-    
-    textures = []
-    for asset in imported:
-        if isinstance(asset, unreal.Texture2D):
-            # Check if this texture already existed
-            asset_name = asset.get_name()
-            if AutoMattyUtils.asset_exists_in_project(asset_name, dest_path):
-                choice = AutoMattyUtils.prompt_user_choice(
-                    f"Texture '{asset_name}' already exists. Use existing or reload?",
-                    ["Use Existing", "Reload", "Skip"]
-                )
-                
-                if choice == "Use Existing":
-                    existing_path = f"{dest_path}/{asset_name}"
-                    textures.append(unreal.EditorAssetLibrary.load_asset(existing_path))
-                elif choice == "Reload":
-                    textures.append(asset)  # Use the newly imported one
-                # Skip = don't add to list
-            else:
-                textures.append(asset)
-    
-    return textures
-
-def determine_workflow(matched_textures):
-    """Determine if we're using ORM packed or split textures"""
+    # 6) Determine workflow
     split_keys = {"Occlusion", "Roughness", "Metallic"}
     has_split = any(k in matched_textures for k in split_keys)
     has_orm = "ORM" in matched_textures
-    
-    if has_split and has_orm:
-        # User has both - prefer split for more control
-        return "split"
-    elif has_split:
-        return "split"
-    elif has_orm:
-        return "orm"
-    else:
-        return "basic"
 
-def create_instance(base_material, dest_path):
-    """Create the material instance"""
-    atools = unreal.AssetToolsHelpers.get_asset_tools()
-    mic_factory = unreal.MaterialInstanceConstantFactoryNew()
+    if has_split:
+        to_set = ["Color", "Normal", "Occlusion", "Roughness", "Metallic"]
+        workflow = "split"
+    elif has_orm:
+        to_set = ["Color", "Normal", "ORM"]
+        workflow = "orm"
+    else:
+        to_set = list(matched_textures.keys())
+        workflow = "basic"
     
-    inst_name = f"{base_material.get_name()}_Inst"
+    unreal.log(f"🎯 Detected workflow: {workflow}")
+
+    # 7) Create the Material Instance with versioning
+    inst_name = f"{base_mat.get_name()}_Inst"
     
-    # Check for existing instance
-    if AutoMattyUtils.asset_exists_in_project(inst_name, dest_path):
-        choice = AutoMattyUtils.prompt_user_choice(
-            f"Material instance '{inst_name}' already exists. Overwrite?",
-            ["Overwrite", "Create New Version", "Cancel"]
+    # Check if it exists and version if needed
+    full_path = f"{material_path}/{inst_name}"
+    if unreal.EditorAssetLibrary.does_asset_exist(full_path):
+        inst_name = AutoMattyUtils.get_next_asset_name(
+            f"{base_mat.get_name()}_Inst", material_path
         )
-        
-        if choice == "Cancel":
-            return None
-        elif choice == "Create New Version":
-            inst_name = AutoMattyUtils.get_next_asset_name(
-                f"{base_material.get_name()}_Inst", dest_path
-            )
     
-    # Create the instance
+    mic_factory = unreal.MaterialInstanceConstantFactoryNew()
     instance = atools.create_asset(
-        inst_name, dest_path, 
+        inst_name, material_path,
         unreal.MaterialInstanceConstant, mic_factory
     )
-    
-    unreal.MaterialEditingLibrary.set_material_instance_parent(instance, base_material)
-    return instance
+    unreal.MaterialEditingLibrary.set_material_instance_parent(instance, base_mat)
+    unreal.log(f"🎉 Created instance: {instance.get_name()}")
 
-def apply_textures_to_instance(instance, matched_textures, workflow):
-    """Apply matched textures to the material instance"""
-    
-    # Define parameter sets for different workflows
-    if workflow == "split":
-        params_to_set = ["Color", "Normal", "Occlusion", "Roughness", "Metallic"]
-    elif workflow == "orm":
-        params_to_set = ["Color", "Normal", "ORM"]
-    else:
-        params_to_set = list(matched_textures.keys())
-    
-    # Apply each texture
-    for param in params_to_set:
+    # 8) Apply matched textures
+    for param in to_set:
         texture = matched_textures.get(param)
         if texture:
             try:
@@ -174,6 +97,10 @@ def apply_textures_to_instance(instance, matched_textures, workflow):
             except Exception as e:
                 unreal.log_warning(f"⚠️ Failed to set {param}: {str(e)}")
 
-# Execute the function
+    # 9) Save it
+    unreal.EditorAssetLibrary.save_asset(instance.get_path_name())
+    unreal.log(f"💾 Saved instance at {instance.get_path_name()}")
+
+# Execute the function when called directly
 if __name__ == "__main__":
     create_material_instance_smart()
