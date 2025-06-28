@@ -28,8 +28,9 @@ def create_material_instance_smart():
 
     # 2) Get custom material path from UI settings
     material_path = AutoMattyConfig.get_custom_material_path()
-    texture_import_path = material_path.replace("/Materials/", "/Textures/")
-    
+    texture_import_path = AutoMattyConfig.get_custom_texture_path()
+
+
     unreal.log(f"📁 Using material path: {material_path}")
     
     # 3) Import textures with dialog

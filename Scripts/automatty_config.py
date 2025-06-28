@@ -9,6 +9,7 @@ class AutoMattyConfig:
     DEFAULT_MATERIAL_PATH = "/Game/Materials/AutoMatty"
     DEFAULT_TEXTURE_PATH = "/Game/Textures/AutoMatty"
     DEFAULT_FUNCTION_PATH = "/Game/Functions"
+    DEFAULT_MATERIAL_PREFIX = "M_AutoMatty"
     
     # Material function names
     CHEAP_CONTRAST_FUNC = "CheapContrast"
@@ -17,6 +18,8 @@ class AutoMattyConfig:
     # UI settings for persistent storage
     UI_SETTINGS_SECTION = "AutoMattyPlugin"
     CUSTOM_MATERIAL_PATH_KEY = "CustomMaterialPath"
+    CUSTOM_TEXTURE_PATH_KEY = "CustomTexturePath"
+    CUSTOM_MATERIAL_PREFIX_KEY = "CustomMaterialPrefix"
     
     # Texture matching patterns
     TEXTURE_PATTERNS = {
@@ -71,6 +74,93 @@ class AutoMattyConfig:
             unreal.log(f"📁 Custom material path set to: {path}")
         except Exception as e:
             unreal.log_error(f"Failed to save config: {e}")
+    
+    @staticmethod
+    def get_custom_texture_path():
+        """Get user-defined texture path from config file"""
+        config_file = AutoMattyConfig._get_config_file_path()
+        
+        try:
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    import json
+                    config_data = json.load(f)
+                    custom_path = config_data.get('texture_path', '')
+                    return custom_path if custom_path.strip() else AutoMattyConfig.DEFAULT_TEXTURE_PATH
+        except Exception as e:
+            unreal.log_warning(f"Could not read texture path config: {e}")
+        
+        return AutoMattyConfig.DEFAULT_TEXTURE_PATH
+    
+    @staticmethod
+    def set_custom_texture_path(path):
+        """Save custom texture path to config file"""
+        config_file = AutoMattyConfig._get_config_file_path()
+        
+        try:
+            # Create config directory if needed
+            import os
+            os.makedirs(os.path.dirname(config_file), exist_ok=True)
+            
+            # Read existing config or create new
+            config_data = {}
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    import json
+                    config_data = json.load(f)
+            
+            # Update and save
+            config_data['texture_path'] = path
+            with open(config_file, 'w') as f:
+                import json
+                json.dump(config_data, f, indent=2)
+            
+            unreal.log(f"🖼️ Custom texture path set to: {path}")
+        except Exception as e:
+            unreal.log_error(f"Failed to save texture path config: {e}")
+    
+    @staticmethod
+    def get_custom_material_prefix():
+        """Get user-defined material prefix from config file"""
+        config_file = AutoMattyConfig._get_config_file_path()
+        
+        try:
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    import json
+                    config_data = json.load(f)
+                    return config_data.get('material_prefix', AutoMattyConfig.DEFAULT_MATERIAL_PREFIX)
+        except Exception as e:
+            unreal.log_warning(f"Could not read material prefix config: {e}")
+        
+        return AutoMattyConfig.DEFAULT_MATERIAL_PREFIX
+    
+    @staticmethod
+    def set_custom_material_prefix(prefix):
+        """Save custom material prefix to config file"""
+        config_file = AutoMattyConfig._get_config_file_path()
+        
+        try:
+            # Create config directory if needed
+            import os
+            os.makedirs(os.path.dirname(config_file), exist_ok=True)
+            
+            # Read existing config or create new
+            config_data = {}
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    import json
+                    config_data = json.load(f)
+            
+            # Update and save
+            config_data['material_prefix'] = prefix
+            with open(config_file, 'w') as f:
+                import json
+                json.dump(config_data, f, indent=2)
+            
+            unreal.log(f"🏷️ Material prefix set to: {prefix}")
+        except Exception as e:
+            unreal.log_error(f"Failed to save material prefix config: {e}")
     
     @staticmethod
     def _get_config_file_path():
@@ -262,7 +352,7 @@ class AutoMattyUtils:
 
 # UI Integration functions (call these from your Editor Utility Widget)
 def ui_set_custom_material_path(path_string):
-    """Called from UI when user sets custom path"""
+    """Called from UI when user sets custom material path"""
     if not path_string.strip():
         unreal.log("📁 Using default material path")
         AutoMattyConfig.set_custom_material_path("")
@@ -284,9 +374,38 @@ def ui_get_current_material_path():
     """Get current material path for UI display"""
     return AutoMattyConfig.get_custom_material_path()
 
-def ui_get_current_material_path():
-    """Get current material path for UI display"""
-    return AutoMattyConfig.get_custom_material_path()
+def ui_set_custom_texture_path(path_string):
+    """Called from UI when user sets custom texture path"""
+    if not path_string.strip():
+        unreal.log("🖼️ Using default texture path")
+        AutoMattyConfig.set_custom_texture_path("")
+        return True
+    
+    # Clean up the path
+    clean_path = path_string.strip()
+    if not clean_path.startswith("/Game/"):
+        clean_path = f"/Game/{clean_path.lstrip('/')}"
+    
+    # Validate and set
+    if AutoMattyConfig.validate_and_create_path(clean_path):
+        AutoMattyConfig.set_custom_texture_path(clean_path)
+        return True
+    else:
+        return False
+
+def ui_get_current_texture_path():
+    """Get current texture path for UI display"""
+    return AutoMattyConfig.get_custom_texture_path()
+
+def ui_set_custom_material_prefix(prefix_string):
+    """Called from UI when user sets custom material prefix"""
+    clean_prefix = prefix_string.strip() or AutoMattyConfig.DEFAULT_MATERIAL_PREFIX
+    AutoMattyConfig.set_custom_material_prefix(clean_prefix)
+    return True
+
+def ui_get_current_material_prefix():
+    """Get current material prefix for UI display"""
+    return AutoMattyConfig.get_custom_material_prefix()
 
 # Test function to validate naming
 def test_naming_extraction():
