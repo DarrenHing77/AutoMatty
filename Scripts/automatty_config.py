@@ -284,6 +284,10 @@ def ui_get_current_material_path():
     """Get current material path for UI display"""
     return AutoMattyConfig.get_custom_material_path()
 
+def ui_get_current_material_path():
+    """Get current material path for UI display"""
+    return AutoMattyConfig.get_custom_material_path()
+
 # Test function to validate naming
 def test_naming_extraction():
     """Test the naming extraction with common patterns"""

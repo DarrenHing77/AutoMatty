@@ -24,7 +24,7 @@ class SubstrateMaterialBuilder:
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
         
-        folder = custom_path or self.config.DEFAULT_MATERIAL_PATH
+        folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
         
         # Create material
@@ -48,7 +48,7 @@ class SubstrateMaterialBuilder:
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
         
-        folder = custom_path or self.config.DEFAULT_MATERIAL_PATH
+        folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
         
         # Create material
@@ -72,7 +72,7 @@ class SubstrateMaterialBuilder:
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
         
-        folder = custom_path or self.config.DEFAULT_MATERIAL_PATH
+        folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
         
         # Create material
