@@ -1,166 +1,123 @@
-# Add this to a new file: Scripts/automatty_repather.py
-
 import unreal
 import os
-from automatty_config import AutoMattyConfig, AutoMattyUtils
 
-def repath_material_instance_textures():
+def repath_material_instances():
     """
     Repath textures in selected material instances to new folder
-    Perfect for versioning up/down texture sets
+    Uses dialog to select target folder
     """
+    import sys
+    proj_dir = unreal.Paths.project_dir()
+    scripts_path = os.path.join(proj_dir, "Plugins", "AutoMatty", "Scripts")
+    if scripts_path not in sys.path:
+        sys.path.append(scripts_path)
+    
+    from automatty_config import AutoMattyConfig, AutoMattyUtils
     
     # 1) Validate selection
     selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()
     instances = [asset for asset in selected_assets if isinstance(asset, unreal.MaterialInstanceConstant)]
     
     if not instances:
-        unreal.log_error("❌ Select some material instances, genius")
+        unreal.log_error("❌ Select some material instances first")
         return
     
     unreal.log(f"🎯 Found {len(instances)} material instances")
     
-    # 2) Prompt for new texture folder
-    # This is the tricky part - UE doesn't have great folder picker support
-    # Workaround: Use import dialog to let user navigate to folder
+    # 2) Get target folder via import dialog
+    unreal.log("📁 Navigate to your new texture folder in the import dialog...")
     atools = unreal.AssetToolsHelpers.get_asset_tools()
+    imported = atools.import_assets_with_dialog("/Game/Textures")
     
-    # Fake import to get folder path (user cancels but we get the path)
-    unreal.log("📁 Navigate to your new texture folder and cancel the import...")
-    
-    # Alternative: Hardcode common paths and let user choose
-    texture_folders = [
-        "/Game/Textures/Materials/v001",
-        "/Game/Textures/Materials/v002", 
-        "/Game/Textures/Materials/Latest",
-        "/Game/Textures/NewSet"
-    ]
-    
-    # For now, let's use a simple approach - user sets target path in config
-    target_folder = "/Game/Textures/NewVersion"  # Make this configurable
-    
-    # 3) Get all textures in target folder
-    target_assets = unreal.EditorAssetLibrary.list_assets(target_folder, recursive=False)
-    target_textures = []
-    
-    for asset_path in target_assets:
-        asset = unreal.EditorAssetLibrary.load_asset(asset_path)
-        if isinstance(asset, unreal.Texture2D):
-            target_textures.append(asset)
-    
-    if not target_textures:
-        unreal.log_error(f"❌ No textures found in {target_folder}")
+    if not imported:
+        unreal.log("⚠️ No target folder selected. Aborting.")
         return
     
-    unreal.log(f"🔍 Found {len(target_textures)} textures in target folder")
+    # Extract folder path from imported asset
+    first_asset_path = imported[0].get_path_name()
+    target_folder = '/'.join(first_asset_path.split('/')[:-1])
+    unreal.log(f"🎯 Target folder: {target_folder}")
     
-    # 4) For each material instance, remap textures
+    # 3) Use imported textures directly
+    target_textures = [asset for asset in imported if isinstance(asset, unreal.Texture2D)]
+    
+    if not target_textures:
+        unreal.log_error(f"❌ No textures in imported assets")
+        return
+    
+    unreal.log(f"🔍 Found {len(target_textures)} imported textures")
+    
+    # 4) Remap each instance
+    total_remapped = 0
     for instance in instances:
         unreal.log(f"🔧 Processing {instance.get_name()}...")
         
-        # Get current texture parameters
-        texture_params = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_names(instance)
+        # Get the parent material
+        parent_material = instance.get_editor_property('parent')
+        
+        if not parent_material:
+            unreal.log_warning(f"  ⚠️ No parent material found for {instance.get_name()}")
+            continue
+        
+        # Get texture parameter names from the parent material
+        texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
         
         remapped_count = 0
+        
         for param_name in texture_params:
-            current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(
-                instance, param_name
-            )
+            current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, param_name)
             
             if current_texture:
-                # Find matching texture in target folder
-                new_texture = find_matching_texture(current_texture, target_textures)
+                new_texture = find_best_match(current_texture, target_textures)
                 
                 if new_texture:
-                    unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(
-                        instance, param_name, new_texture
-                    )
+                    unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
                     unreal.log(f"  ✅ {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
                     remapped_count += 1
                 else:
-                    unreal.log_warning(f"  ⚠️ No match found for {param_name}: {current_texture.get_name()}")
+                    unreal.log_warning(f"  ⚠️ No match for {param_name}: {current_texture.get_name()}")
         
         if remapped_count > 0:
             unreal.EditorAssetLibrary.save_asset(instance.get_path_name())
-            unreal.log(f"💾 Saved {instance.get_name()} with {remapped_count} remapped textures")
+            total_remapped += remapped_count
+    
+    unreal.log(f"🏆 Remapped {total_remapped} textures total")
 
-def find_matching_texture(current_texture, target_textures):
-    """
-    Find best matching texture in target folder
-    Uses multiple strategies for matching
-    """
+def find_best_match(current_texture, target_textures):
+    """Smart texture matching with multiple strategies"""
+    import re
     current_name = current_texture.get_name().lower()
     
-    # Strategy 1: Exact name match
+    # 1. Exact match
     for tex in target_textures:
         if tex.get_name().lower() == current_name:
             return tex
     
-    # Strategy 2: Remove version suffixes and match
-    # e.g., "Wood_Color_v001" matches "Wood_Color_v002"
-    import re
+    # 2. Version-agnostic match (remove _v001, _v002, etc.)
     clean_current = re.sub(r'_v\d+$', '', current_name)
-    
     for tex in target_textures:
         clean_target = re.sub(r'_v\d+$', '', tex.get_name().lower())
         if clean_target == clean_current:
             return tex
     
-    # Strategy 3: Fuzzy matching by texture type
-    # Extract texture type (Color, Normal, ORM, etc.)
-    current_type = extract_texture_type(current_name)
-    if current_type:
-        base_name = extract_base_name(current_name)
-        
-        for tex in target_textures:
-            target_name = tex.get_name().lower()
-            target_type = extract_texture_type(target_name)
-            target_base = extract_base_name(target_name)
-            
-            # Match if same type and similar base name
-            if current_type == target_type and base_name in target_base:
-                return tex
-    
-    return None
-
-def extract_texture_type(texture_name):
-    """Extract texture type from name (Color, Normal, ORM, etc.)"""
+    # 3. Type-based matching (Color → BaseColor, etc.)
+    from automatty_config import AutoMattyConfig
     patterns = AutoMattyConfig.TEXTURE_PATTERNS
     
+    current_type = None
     for tex_type, pattern in patterns.items():
-        if pattern.search(texture_name):
-            return tex_type
+        if pattern.search(current_name):
+            current_type = tex_type
+            break
+    
+    if current_type:
+        for tex in target_textures:
+            for tex_type, pattern in patterns.items():
+                if tex_type == current_type and pattern.search(tex.get_name().lower()):
+                    return tex
+    
     return None
 
-def extract_base_name(texture_name):
-    """Extract base material name from texture"""
-    # Remove common suffixes
-    import re
-    base = re.sub(r'_(color|normal|orm|rough|metal|ao|occlusion).*$', '', texture_name, flags=re.IGNORECASE)
-    base = re.sub(r'_v\d+$', '', base)  # Remove version
-    return base
-
-def repath_with_folder_prompt():
-    """
-    Version with better folder selection
-    """
-    # Get user to select target folder by having them select any asset in it
-    selected = unreal.EditorUtilityLibrary.get_selected_assets()
-    
-    if not selected:
-        unreal.log_error("❌ Select an asset in your target texture folder first")
-        return
-    
-    # Extract folder path from selected asset
-    asset_path = selected[0].get_path_name()
-    target_folder = '/'.join(asset_path.split('/')[:-1])  # Remove asset name
-    
-    unreal.log(f"🎯 Using target folder: {target_folder}")
-    
-    # Now select material instances and run the repath
-    unreal.log("Now select your material instances and run this again...")
-    # ... rest of repath logic
-
-# Main execution
+# Execute
 if __name__ == "__main__":
-    repath_material_instance_textures()
+    repath_material_instances()
