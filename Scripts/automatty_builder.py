@@ -122,7 +122,7 @@ class SubstrateMaterialBuilder:
         return material
     
     def _build_orm_graph(self, material):
-        """Build ORM material node graph"""
+        """Build ORM material node graph - FIXED CHANNEL MASKS"""
         default_normal = AutoMattyUtils.find_default_normal()
         
         # Create texture sample nodes
@@ -152,18 +152,26 @@ class SubstrateMaterialBuilder:
         # Connect Color → Diffuse Albedo
         self.lib.connect_material_expressions(samples["Color"], "", slab, "Diffuse Albedo")
         
-        # Split ORM channels
+        # Split ORM channels - FIXED VERSION
         rough_mask = self.lib.create_material_expression(
             material, unreal.MaterialExpressionComponentMask, -200, 50
         )
-        rough_mask.set_editor_property("g", True)
+        # Explicitly set all channels - only G should be True
+        rough_mask.set_editor_property("r", False)
+        rough_mask.set_editor_property("g", True)   # Roughness = Green channel
+        rough_mask.set_editor_property("b", False)
+        rough_mask.set_editor_property("a", False)
         self.lib.connect_material_expressions(samples["ORM"], "", rough_mask, "")
         self.lib.connect_material_expressions(rough_mask, "", slab, "Roughness")
         
         metal_mask = self.lib.create_material_expression(
             material, unreal.MaterialExpressionComponentMask, -200, -150
         )
-        metal_mask.set_editor_property("b", True)
+        # Explicitly set all channels - only B should be True
+        metal_mask.set_editor_property("r", False)
+        metal_mask.set_editor_property("g", False)
+        metal_mask.set_editor_property("b", True)   # Metallic = Blue channel
+        metal_mask.set_editor_property("a", False)
         self.lib.connect_material_expressions(samples["ORM"], "", metal_mask, "")
         self.lib.connect_material_expressions(metal_mask, "", slab, "F0")
         
@@ -214,166 +222,147 @@ class SubstrateMaterialBuilder:
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
     
     def _build_advanced_graph_builtin(self, material):
-        """Build advanced material using built-in UE material expression nodes"""
+        """Build advanced material using built-in UE material expression nodes - CLEANED UP VERSION"""
         default_normal = AutoMattyUtils.find_default_normal()
         
-        # === COLOR CHANNEL GROUP ===
+        # === TEXTURE SAMPLERS (Left Column) ===
         color_tex = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionTextureSampleParameter2D, -800, 400
+            material, unreal.MaterialExpressionTextureSampleParameter2D, -1200, 200
         )
         color_tex.set_editor_property("parameter_name", "Color")
 
-        # Color Contrast using Power node (cheap contrast approximation)
-        color_contrast_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -600, 450
-        )
-        color_contrast_param.set_editor_property("parameter_name", "ColorContrast")
-        color_contrast_param.set_editor_property("default_value", 1.0)
-        
-        color_power = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionPower, -600, 400
-        )
-        self.lib.connect_material_expressions(color_tex, "", color_power, "Base")
-        self.lib.connect_material_expressions(color_contrast_param, "", color_power, "Exp")
-
-        # Color Remap using Lerp
-        color_min_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -400, 350
-        )
-        color_min_param.set_editor_property("parameter_name", "ColorMin")
-        color_min_param.set_editor_property("default_value", 0.0)
-        
-        color_max_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -400, 450
-        )
-        color_max_param.set_editor_property("parameter_name", "ColorMax")
-        color_max_param.set_editor_property("default_value", 1.0)
-        
-        color_lerp = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionLinearInterpolate, -400, 400
-        )
-        self.lib.connect_material_expressions(color_min_param, "", color_lerp, "A")
-        self.lib.connect_material_expressions(color_max_param, "", color_lerp, "B")
-        self.lib.connect_material_expressions(color_power, "", color_lerp, "Alpha")
-
-        # === ORM CHANNEL GROUP ===
         orm_tex = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionTextureSampleParameter2D, -800, 0
+            material, unreal.MaterialExpressionTextureSampleParameter2D, -1200, -100
         )
         orm_tex.set_editor_property("parameter_name", "ORM")
 
-        # Roughness mask (G channel)
-        rough_mask = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionComponentMask, -600, 0
-        )
-        rough_mask.set_editor_property("g", True)
-        self.lib.connect_material_expressions(orm_tex, "", rough_mask, "")
-
-        # Roughness Contrast
-        rough_contrast_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -400, 50
-        )
-        rough_contrast_param.set_editor_property("parameter_name", "RoughnessContrast")
-        rough_contrast_param.set_editor_property("default_value", 1.0)
-        
-        rough_power = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionPower, -400, 0
-        )
-        self.lib.connect_material_expressions(rough_mask, "", rough_power, "Base")
-        self.lib.connect_material_expressions(rough_contrast_param, "", rough_power, "Exp")
-
-        # Roughness Remap
-        rough_min_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -200, -50
-        )
-        rough_min_param.set_editor_property("parameter_name", "RoughnessMin")
-        rough_min_param.set_editor_property("default_value", 0.0)
-        
-        rough_max_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -200, 50
-        )
-        rough_max_param.set_editor_property("parameter_name", "RoughnessMax")
-        rough_max_param.set_editor_property("default_value", 1.0)
-        
-        rough_lerp = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionLinearInterpolate, -200, 0
-        )
-        self.lib.connect_material_expressions(rough_min_param, "", rough_lerp, "A")
-        self.lib.connect_material_expressions(rough_max_param, "", rough_lerp, "B")
-        self.lib.connect_material_expressions(rough_power, "", rough_lerp, "Alpha")
-
-        # Metallic mask (B channel)
-        metal_mask = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionComponentMask, -600, -150
-        )
-        metal_mask.set_editor_property("b", True)
-        self.lib.connect_material_expressions(orm_tex, "", metal_mask, "")
-
-        # === NORMAL CHANNEL GROUP ===
         normal_tex = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionTextureSampleParameter2D, -800, -300
+            material, unreal.MaterialExpressionTextureSampleParameter2D, -1200, -400
         )
         normal_tex.set_editor_property("parameter_name", "Normal")
         normal_tex.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
         if default_normal:
             normal_tex.set_editor_property("texture", default_normal)
 
-        # === MFP/SSS CHANNEL GROUP ===
-        # UseDiffuseAsMFP switch
-        switch = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionStaticSwitchParameter, -800, -500
+        # === COLOR PROCESSING ===
+        # Color Contrast using Power node only
+        color_contrast_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -900, 250
         )
-        switch.set_editor_property("parameter_name", "UseDiffuseAsMFP")
-        switch.set_editor_property("default_value", True)
+        color_contrast_param.set_editor_property("parameter_name", "ColorContrast")
+        color_contrast_param.set_editor_property("default_value", 1.0)
+        
+        color_power = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionPower, -600, 200
+        )
+        self.lib.connect_material_expressions(color_tex, "", color_power, "Base")
+        self.lib.connect_material_expressions(color_contrast_param, "", color_power, "Exp")
 
-        # MFP Color Multiplier
-        mfp_col_mult = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -600, -500
+        # === ORM BREAKDOWN (Middle-Left) ===
+        # Roughness mask (G channel) - FIXED
+        rough_mask = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionComponentMask, -900, -50
         )
-        mfp_col_mult.set_editor_property("parameter_name", "MFPColorMultiplier")
-        mfp_col_mult.set_editor_property("default_value", 1.0)
+        rough_mask.set_editor_property("r", False)
+        rough_mask.set_editor_property("g", True)   # Roughness = Green channel
+        rough_mask.set_editor_property("b", False)
+        rough_mask.set_editor_property("a", False)
+        self.lib.connect_material_expressions(orm_tex, "", rough_mask, "")
+
+        # Metallic mask (B channel) - FIXED
+        metal_mask = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionComponentMask, -900, -200
+        )
+        metal_mask.set_editor_property("r", False)
+        metal_mask.set_editor_property("g", False)
+        metal_mask.set_editor_property("b", True)   # Metallic = Blue channel
+        metal_mask.set_editor_property("a", False)
+        self.lib.connect_material_expressions(orm_tex, "", metal_mask, "")
+
+        # AO mask (R channel) - FIXED
+        ao_mask = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionComponentMask, -900, -350
+        )
+        ao_mask.set_editor_property("r", True)   # AO = Red channel
+        ao_mask.set_editor_property("g", False)
+        ao_mask.set_editor_property("b", False)
+        ao_mask.set_editor_property("a", False)
+        self.lib.connect_material_expressions(orm_tex, "", ao_mask, "")
+
+        # === ROUGHNESS PROCESSING ===
+        # Roughness parameters
+        rough_min_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -600, -50
+        )
+        rough_min_param.set_editor_property("parameter_name", "RoughnessMin")
+        rough_min_param.set_editor_property("default_value", 0.0)
+        
+        rough_max_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -600, -100
+        )
+        rough_max_param.set_editor_property("parameter_name", "RoughnessMax")
+        rough_max_param.set_editor_property("default_value", 1.0)
+        
+        # MaterialFunctionCall for RemapValueRange (FIXED!)
+        remap_roughness = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionMaterialFunctionCall, -300, -100
+        )
+        
+        # Load the built-in RemapValueRange function
+        remap_function = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions03/Math/RemapValueRange")
+        if remap_function:
+            remap_roughness.set_editor_property("material_function", remap_function)
+            
+            # Connect inputs: Value, Output Min, Output Max
+            self.lib.connect_material_expressions(rough_mask, "", remap_roughness, "Input")
+            self.lib.connect_material_expressions(rough_min_param, "", remap_roughness, "Target Low")
+            self.lib.connect_material_expressions(rough_max_param, "", remap_roughness, "Target High")
+        else:
+            unreal.log_error("❌ RemapValueRange function not found!")
+            # Fallback to direct roughness connection
+            remap_roughness = rough_mask
+
+        # === MFP/SSS PROCESSING ===
+        # MFP Color parameter (NEW!)
+        mfp_color_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionVectorParameter, -1200, -700
+        )
+        mfp_color_param.set_editor_property("parameter_name", "MFPColor")
+        mfp_color_param.set_editor_property("default_value", unreal.LinearColor(1.0, 0.5, 0.3, 1.0))  # Nice skin tone default
+
+        # UseDiffuseAsMFP switch
+        use_diffuse_switch = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionStaticSwitchParameter, -600, -400
+        )
+        use_diffuse_switch.set_editor_property("parameter_name", "UseDiffuseAsMFP")
+        use_diffuse_switch.set_editor_property("default_value", True)
 
         # MFP Scale
         mfp_scale = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -400, -500
+            material, unreal.MaterialExpressionScalarParameter, -600, -500
         )
         mfp_scale.set_editor_property("parameter_name", "MFPScale")
         mfp_scale.set_editor_property("default_value", 1.0)
 
-        # Multiply Color * MFPColorMultiplier
-        mfp_mul = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMultiply, -200, -450
-        )
-        self.lib.connect_material_expressions(color_tex, "", mfp_mul, "A")
-        self.lib.connect_material_expressions(mfp_col_mult, "", mfp_mul, "B")
+        # Switch connections: True = diffuse color, False = MFP color parameter
+        self.lib.connect_material_expressions(color_power, "", use_diffuse_switch, "True")
+        self.lib.connect_material_expressions(mfp_color_param, "", use_diffuse_switch, "False")
 
-        # Switch: True = mul result, False = raw color
-        self.lib.connect_material_expressions(mfp_mul, "", switch, "True")
-        self.lib.connect_material_expressions(color_tex, "", switch, "False")
-
-        # === SUBSTRATE SLAB BSDF & HOOKUP ===
+        # === SUBSTRATE SLAB BSDF ===
         slab = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionSubstrateSlabBSDF, 200, 0
+            material, unreal.MaterialExpressionSubstrateSlabBSDF, 100, -100
         )
 
-        # Connect processed outputs
-        self.lib.connect_material_expressions(color_lerp, "", slab, "Diffuse Albedo")
-        self.lib.connect_material_expressions(rough_lerp, "", slab, "Roughness")
+        # Connect everything to Substrate Slab
+        self.lib.connect_material_expressions(color_power, "", slab, "Diffuse Albedo")
+        self.lib.connect_material_expressions(remap_roughness, "", slab, "Roughness")
         self.lib.connect_material_expressions(metal_mask, "", slab, "F0")
-        
-        # Use R channel for AO
-        ao_mask = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionComponentMask, -600, -100
-        )
-        ao_mask.set_editor_property("r", True)
-        self.lib.connect_material_expressions(orm_tex, "", ao_mask, "")
         self.lib.connect_material_expressions(ao_mask, "", slab, "AmbientOcclusion")
-        
         self.lib.connect_material_expressions(normal_tex, "", slab, "Normal")
-        self.lib.connect_material_expressions(switch, "", slab, "SSS MFP")
+        self.lib.connect_material_expressions(use_diffuse_switch, "", slab, "SSS MFP")
         self.lib.connect_material_expressions(mfp_scale, "", slab, "SSS MFP Scale")
 
-        # Wire to output
+        # Connect to material output
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
 
 # Usage functions
