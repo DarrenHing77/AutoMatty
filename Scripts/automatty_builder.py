@@ -1,5 +1,5 @@
 """
-AutoMatty Material Builder - Substrate material creation with universal plugin support
+AutoMatty Material Builder - Substrate material creation with universal plugin support and custom prefix
 """
 import unreal
 
@@ -31,11 +31,17 @@ class SubstrateMaterialBuilder:
             if hasattr(self.config, key):
                 setattr(self.config, key, value)
     
-    def create_orm_material(self, base_name="M_AutoMattyORM", custom_path=None):
+    def create_orm_material(self, base_name=None, custom_path=None):
         """Create ORM packed Substrate material"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
+        
+        # Use custom prefix if no base_name provided
+        if base_name is None:
+            custom_prefix = AutoMattyConfig.get_custom_material_prefix()
+            base_name = f"{custom_prefix}_ORM"
+            unreal.log(f"🏷️ Using custom prefix: {base_name}")
         
         folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
@@ -55,11 +61,17 @@ class SubstrateMaterialBuilder:
         unreal.log(f"✅ ORM Substrate material '{name}' created in {folder}")
         return material
     
-    def create_split_material(self, base_name="M_AutoMattySplit", custom_path=None):
+    def create_split_material(self, base_name=None, custom_path=None):
         """Create split texture Substrate material"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
+        
+        # Use custom prefix if no base_name provided
+        if base_name is None:
+            custom_prefix = AutoMattyConfig.get_custom_material_prefix()
+            base_name = f"{custom_prefix}_Split"
+            unreal.log(f"🏷️ Using custom prefix: {base_name}")
         
         folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
@@ -79,11 +91,17 @@ class SubstrateMaterialBuilder:
         unreal.log(f"✅ Split Substrate material '{name}' created in {folder}")
         return material
     
-    def create_advanced_material(self, base_name="M_AdvancedSubstrate", custom_path=None):
+    def create_advanced_material(self, base_name=None, custom_path=None):
         """Create advanced Substrate material with built-in UE functions"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
+        
+        # Use custom prefix if no base_name provided
+        if base_name is None:
+            custom_prefix = AutoMattyConfig.get_custom_material_prefix()
+            base_name = f"{custom_prefix}_Advanced"
+            unreal.log(f"🏷️ Using custom prefix: {base_name}")
         
         folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
