@@ -1,5 +1,18 @@
+"""
+AutoMatty Material Builder - Substrate material creation with universal plugin support
+"""
 import unreal
-from automatty_config import AutoMattyConfig, AutoMattyUtils
+
+# Setup AutoMatty imports
+try:
+    from automatty_utils import setup_automatty_imports
+    if not setup_automatty_imports():
+        raise ImportError("Failed to setup AutoMatty imports")
+    from automatty_config import AutoMattyConfig, AutoMattyUtils
+except ImportError as e:
+    unreal.log_error(f"❌ AutoMatty import failed: {e}")
+    # Don't continue if imports fail
+    raise
 
 class SubstrateMaterialBuilder:
     """Modular builder for Substrate materials"""

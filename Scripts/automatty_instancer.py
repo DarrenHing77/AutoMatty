@@ -1,19 +1,23 @@
+"""
+AutoMatty Material Instance Creator - Smart material instance creation with universal plugin support
+"""
 import unreal
-import os
+
+# Setup AutoMatty imports
+try:
+    from automatty_utils import setup_automatty_imports
+    if not setup_automatty_imports():
+        raise ImportError("Failed to setup AutoMatty imports")
+    from automatty_config import AutoMattyConfig, AutoMattyUtils
+except ImportError as e:
+    unreal.log_error(f"❌ AutoMatty import failed: {e}")
+    # Don't continue if imports fail
+    raise
 
 def create_material_instance_smart():
     """
     Enhanced material instance creator with smart naming and custom paths
     """
-    
-    # Set up imports after path configuration
-    import sys
-    proj_dir = unreal.Paths.project_dir()
-    scripts_path = os.path.join(proj_dir, "Plugins", "AutoMatty", "Scripts")
-    if scripts_path not in sys.path:
-        sys.path.append(scripts_path)
-    
-    from automatty_config import AutoMattyConfig, AutoMattyUtils
     
     # 1) Validate selected material
     selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()
@@ -29,7 +33,6 @@ def create_material_instance_smart():
     # 2) Get custom material path from UI settings
     material_path = AutoMattyConfig.get_custom_material_path()
     texture_import_path = AutoMattyConfig.get_custom_texture_path()
-
 
     unreal.log(f"📁 Using material path: {material_path}")
     
@@ -114,15 +117,6 @@ def create_material_instance_with_browser():
     Alternative version using content browser selection instead of import
     """
     
-    # Set up imports
-    import sys
-    proj_dir = unreal.Paths.project_dir()
-    scripts_path = os.path.join(proj_dir, "Plugins", "AutoMatty", "Scripts")
-    if scripts_path not in sys.path:
-        sys.path.append(scripts_path)
-    
-    from automatty_config import AutoMattyConfig, AutoMattyUtils
-    
     # Get selected assets from content browser
     selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()
     
@@ -189,14 +183,6 @@ def create_material_instance_from_recent():
     """
     Create instance from recently imported textures (good for drag-drop workflow)
     """
-    
-    import sys
-    proj_dir = unreal.Paths.project_dir()
-    scripts_path = os.path.join(proj_dir, "Plugins", "AutoMatty", "Scripts")
-    if scripts_path not in sys.path:
-        sys.path.append(scripts_path)
-    
-    from automatty_config import AutoMattyConfig, AutoMattyUtils
     
     # Get selected material
     selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()

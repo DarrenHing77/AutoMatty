@@ -1,6 +1,26 @@
+"""
+AutoMatty Configuration and Utilities
+Centralized config with UI integration and smart naming
+"""
 import unreal
 import re
 import os
+
+# Import the universal utils first
+try:
+    from automatty_utils import setup_automatty_imports
+    setup_automatty_imports()
+except ImportError:
+    # Fallback if utils not found
+    import sys
+    possible_paths = [
+        os.path.join(unreal.Paths.project_dir(), "Plugins", "AutoMatty", "Scripts"),
+        os.path.join(unreal.Paths.engine_dir(), "Plugins", "AutoMatty", "Scripts")
+    ]
+    for path in possible_paths:
+        if os.path.exists(path) and path not in sys.path:
+            sys.path.insert(0, path)
+            break
 
 class AutoMattyConfig:
     """Centralized config for AutoMatty plugin with UI integration"""
