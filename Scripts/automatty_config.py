@@ -43,12 +43,13 @@ class AutoMattyConfig:
     
     # Texture matching patterns
     TEXTURE_PATTERNS = {
+        "ORM": re.compile(r"(?:^|[_\W])orm(?:$|[_\W])|occlusion[-_]?roughness[-_]?metal(?:lic|ness)", re.IGNORECASE),
         "Color": re.compile(r"(colou?r|albedo|base[-_]?color|diffuse)", re.IGNORECASE),
         "Normal": re.compile(r"normal", re.IGNORECASE),
         "Occlusion": re.compile(r"(?:^|[_\W])(?:ao|occlusion)(?:$|[_\W])", re.IGNORECASE),
         "Roughness": re.compile(r"roughness", re.IGNORECASE),
         "Metallic": re.compile(r"metal(?:lic|ness)", re.IGNORECASE),
-        "ORM": re.compile(r"(?:^|[_\W])orm(?:$|[_\W])|occlusion[-_]?roughness[-_]?metalness", re.IGNORECASE),
+        
     }
     
     @staticmethod
