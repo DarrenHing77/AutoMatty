@@ -1,5 +1,5 @@
 """
-AutoMatty Configuration and Utilities
+AutoMatty Configuration and Utilities with Height Map Support
 Centralized config with UI integration and smart naming
 """
 import unreal
@@ -41,7 +41,7 @@ class AutoMattyConfig:
     CUSTOM_TEXTURE_PATH_KEY = "CustomTexturePath"
     CUSTOM_MATERIAL_PREFIX_KEY = "CustomMaterialPrefix"
     
-    # Texture matching patterns
+    # Texture matching patterns - UPDATED WITH HEIGHT SUPPORT
     TEXTURE_PATTERNS = {
         "ORM": re.compile(r"(?:^|[_\W])orm(?:$|[_\W])|occlusion[-_]?roughness[-_]?metal(?:lic|ness)", re.IGNORECASE),
         "Color": re.compile(r"(colou?r|albedo|base[-_]?color|diffuse)", re.IGNORECASE),
@@ -49,7 +49,8 @@ class AutoMattyConfig:
         "Occlusion": re.compile(r"(?:^|[_\W])(?:ao|occlusion)(?:$|[_\W])", re.IGNORECASE),
         "Roughness": re.compile(r"roughness", re.IGNORECASE),
         "Metallic": re.compile(r"metal(?:lic|ness)", re.IGNORECASE),
-        
+        "Height": re.compile(r"(?:^|[_\W])(?:height|disp|displacement)(?:$|[_\W])", re.IGNORECASE),
+        "Emission": re.compile(r"(?:^|[_\W])(?:emission|emissive|glow)(?:$|[_\W])", re.IGNORECASE),
     }
     
     @staticmethod
@@ -209,7 +210,7 @@ class AutoMattyConfig:
             return False
 
 class AutoMattyUtils:
-    """Utility functions for AutoMatty with enhanced smart naming"""
+    """Utility functions for AutoMatty with enhanced smart naming and height map support"""
     
     @staticmethod
     def get_user_path(prompt_text, default_path):
@@ -263,10 +264,17 @@ class AutoMattyUtils:
         return unreal.EditorAssetLibrary.does_asset_exist(func_path)
     
     @staticmethod
-    def match_textures_to_params(textures, patterns=None):
-        """Match texture list to material parameters"""
+    def match_textures_to_params(textures, patterns=None, include_height=False):
+        """
+        Match texture list to material parameters
+        include_height: If True, includes Height in matching (for nanite materials)
+        """
         if patterns is None:
             patterns = AutoMattyConfig.TEXTURE_PATTERNS
+        
+        # Filter patterns based on include_height flag
+        if not include_height and "Height" in patterns:
+            patterns = {k: v for k, v in patterns.items() if k != "Height"}
         
         found = {}
         for tex in textures:
@@ -310,7 +318,7 @@ class AutoMattyUtils:
         # Remove resolution info (2K, 4K, 1024, etc)
         base_name = re.sub(r'_(?:\d+k|\d{3,4})$', '', base_name, flags=re.IGNORECASE)
         
-        # Remove texture type suffixes (color, normal, orm, etc)
+        # Remove texture type suffixes (color, normal, orm, height, etc)
         texture_types = [
             'color', 'colour', 'albedo', 'diffuse', 'basecolor', 'base_color',
             'normal', 'norm', 'nrm', 'bump',
@@ -319,7 +327,7 @@ class AutoMattyUtils:
             'specular', 'spec',
             'occlusion', 'ao', 'ambient_occlusion',
             'orm', 'rma', 'mas',  # packed maps
-            'height', 'displacement', 'disp',
+            'height', 'displacement', 'disp',  # height/displacement maps
             'emission', 'emissive', 'glow'
         ]
         
@@ -428,17 +436,17 @@ def ui_get_current_material_prefix():
     """Get current material prefix for UI display"""
     return AutoMattyConfig.get_custom_material_prefix()
 
-# Test function to validate naming
+# Test function to validate naming with height maps
 def test_naming_extraction():
-    """Test the naming extraction with common patterns"""
+    """Test the naming extraction with common patterns including height maps"""
     test_cases = [
         "ChrHead_color_1001_sRGB",
         "Wood_Planks_Normal_2K", 
         "MetalPanel_ORM_4K",
         "Fabric_Roughness_Linear",
-        "Stone_Wall_Albedo_<udim>",
-        "ComplexMaterial_BaseColor_v002_1001_sRGB",
-        "SimpleRock_Color",
+        "Stone_Wall_Height_<udim>",  # Height map test
+        "ComplexMaterial_Displacement_v002_1001_sRGB",  # Displacement test
+        "SimpleRock_Disp",  # Simple displacement
         "T_Ground_Mud_D"  # UE convention
     ]
     

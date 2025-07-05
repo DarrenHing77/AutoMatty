@@ -1,5 +1,5 @@
 """
-AutoMatty Texture Repather - Smart texture replacement in material instances with universal plugin support
+AutoMatty Texture Repather with Height Map Support - Smart texture replacement in material instances with universal plugin support
 """
 import unreal
 
@@ -16,7 +16,7 @@ except ImportError as e:
 
 def repath_material_instances():
     """
-    Repath textures in selected material instances to new folder
+    Repath textures in selected material instances to new folder with height map support
     Uses dialog to select target folder
     """
     
@@ -53,6 +53,11 @@ def repath_material_instances():
     
     unreal.log(f"🔍 Found {len(target_textures)} imported textures")
     
+    # Check for height maps in target textures
+    height_maps = [tex for tex in target_textures if _is_height_texture(tex.get_name())]
+    if height_maps:
+        unreal.log(f"🏔️ Found {len(height_maps)} height/displacement maps in target textures")
+    
     # 4) Remap each instance
     total_remapped = 0
     for instance in instances:
@@ -68,17 +73,21 @@ def repath_material_instances():
         # Get texture parameter names from the parent material
         texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
         
+        # Check if material has height parameter
+        has_height_param = "Height" in texture_params
+        
         remapped_count = 0
         
         for param_name in texture_params:
             current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, param_name)
             
             if current_texture:
-                new_texture = find_best_match(current_texture, target_textures)
+                new_texture = find_best_match(current_texture, target_textures, param_name)
                 
                 if new_texture:
                     unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
-                    unreal.log(f"  ✅ {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
+                    param_emoji = "🏔️" if param_name == "Height" else "✅"
+                    unreal.log(f"  {param_emoji} {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
                     remapped_count += 1
                 else:
                     unreal.log_warning(f"  ⚠️ No match for {param_name}: {current_texture.get_name()}")
@@ -89,8 +98,8 @@ def repath_material_instances():
     
     unreal.log(f"🏆 Remapped {total_remapped} textures total")
 
-def find_best_match(current_texture, target_textures):
-    """Smart texture matching with multiple strategies"""
+def find_best_match(current_texture, target_textures, param_name=None):
+    """Smart texture matching with multiple strategies including height map support"""
     import re
     current_name = current_texture.get_name().lower()
     
@@ -106,9 +115,19 @@ def find_best_match(current_texture, target_textures):
         if clean_target == clean_current:
             return tex
     
-    # 3. Type-based matching (Color → BaseColor, etc.)
+    # 3. Type-based matching (Color → BaseColor, Height → Displacement, etc.)
     patterns = AutoMattyConfig.TEXTURE_PATTERNS
     
+    # If we know the parameter name, prioritize that type
+    if param_name:
+        target_type = param_name
+        if target_type in patterns:
+            pattern = patterns[target_type]
+            for tex in target_textures:
+                if pattern.search(tex.get_name().lower()):
+                    return tex
+    
+    # 4. Fallback to general type matching
     current_type = None
     for tex_type, pattern in patterns.items():
         if pattern.search(current_name):
@@ -125,7 +144,7 @@ def find_best_match(current_texture, target_textures):
 
 def repath_material_instances_from_folder():
     """
-    Alternative version - repath from existing folder instead of importing
+    Alternative version - repath from existing folder instead of importing with height map support
     """
     
     # 1) Validate selection
@@ -157,6 +176,11 @@ def repath_material_instances_from_folder():
     
     unreal.log(f"🔍 Found {len(target_textures)} textures in folder")
     
+    # Check for height maps
+    height_maps = [tex for tex in target_textures if _is_height_texture(tex.get_name())]
+    if height_maps:
+        unreal.log(f"🏔️ Found {len(height_maps)} height/displacement maps")
+    
     # 4) Remap each instance (same logic as main function)
     total_remapped = 0
     for instance in instances:
@@ -176,11 +200,12 @@ def repath_material_instances_from_folder():
             current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, param_name)
             
             if current_texture:
-                new_texture = find_best_match(current_texture, target_textures)
+                new_texture = find_best_match(current_texture, target_textures, param_name)
                 
                 if new_texture:
                     unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
-                    unreal.log(f"  ✅ {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
+                    param_emoji = "🏔️" if param_name == "Height" else "✅"
+                    unreal.log(f"  {param_emoji} {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
                     remapped_count += 1
                 else:
                     unreal.log_warning(f"  ⚠️ No match for {param_name}: {current_texture.get_name()}")
@@ -193,7 +218,7 @@ def repath_material_instances_from_folder():
 
 def batch_repath_by_name_pattern():
     """
-    Advanced version - batch repath by matching name patterns
+    Advanced version - batch repath by matching name patterns with height map support
     """
     
     selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()
@@ -212,14 +237,18 @@ def batch_repath_by_name_pattern():
         # Extract base name from instance (remove _Inst suffix)
         instance_base = instance.get_name().replace("_Inst", "").replace("M_", "")
         
-        # Search for textures with matching base names
+        # Search for textures with matching base names (including height maps)
         texture_search_patterns = [
             f"*{instance_base}*Color*",
             f"*{instance_base}*Normal*",
             f"*{instance_base}*ORM*",
             f"*{instance_base}*Roughness*",
             f"*{instance_base}*Metallic*",
-            f"*{instance_base}*Occlusion*"
+            f"*{instance_base}*Occlusion*",
+            f"*{instance_base}*Height*",
+            f"*{instance_base}*Displacement*",
+            f"*{instance_base}*Disp*",
+            f"*{instance_base}*Emission*"
         ]
         
         found_textures = []
@@ -235,7 +264,14 @@ def batch_repath_by_name_pattern():
             unreal.log_warning(f"  ⚠️ No matching textures found for {instance.get_name()}")
             continue
         
+        # Remove duplicates
+        found_textures = list(set(found_textures))
         unreal.log(f"  🔍 Found {len(found_textures)} matching textures")
+        
+        # Check for height maps
+        height_maps = [tex for tex in found_textures if _is_height_texture(tex.get_name())]
+        if height_maps:
+            unreal.log(f"  🏔️ Including {len(height_maps)} height/displacement maps")
         
         # Apply the matching logic
         parent_material = instance.get_editor_property('parent')
@@ -249,11 +285,12 @@ def batch_repath_by_name_pattern():
             current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, param_name)
             
             if current_texture:
-                new_texture = find_best_match(current_texture, found_textures)
+                new_texture = find_best_match(current_texture, found_textures, param_name)
                 
                 if new_texture:
                     unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
-                    unreal.log(f"  ✅ {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
+                    param_emoji = "🏔️" if param_name == "Height" else "✅"
+                    unreal.log(f"  {param_emoji} {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
                     remapped_count += 1
         
         if remapped_count > 0:
@@ -261,6 +298,95 @@ def batch_repath_by_name_pattern():
             total_remapped += remapped_count
     
     unreal.log(f"🏆 Batch remapped {total_remapped} textures total")
+
+def _is_height_texture(texture_name):
+    """
+    Check if a texture name indicates it's a height/displacement map
+    """
+    height_pattern = AutoMattyConfig.TEXTURE_PATTERNS.get("Height")
+    if height_pattern:
+        return height_pattern.search(texture_name.lower()) is not None
+    return False
+
+def repath_nanite_materials_only():
+    """
+    Specialized function to repath only materials that have nanite/height displacement support
+    """
+    
+    selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()
+    instances = [asset for asset in selected_assets if isinstance(asset, unreal.MaterialInstanceConstant)]
+    
+    if not instances:
+        unreal.log_error("❌ Select some material instances first")
+        return
+    
+    # Filter to only nanite-enabled instances
+    nanite_instances = []
+    for instance in instances:
+        parent_material = instance.get_editor_property('parent')
+        if parent_material:
+            texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
+            if "Height" in texture_params:
+                nanite_instances.append(instance)
+                unreal.log(f"🏔️ Found nanite-enabled instance: {instance.get_name()}")
+    
+    if not nanite_instances:
+        unreal.log_warning("⚠️ No nanite-enabled material instances found in selection")
+        return
+    
+    unreal.log(f"🎯 Processing {len(nanite_instances)} nanite-enabled instances")
+    
+    # Get target folder via import dialog
+    unreal.log("📁 Navigate to your new texture folder (must include height maps)...")
+    atools = unreal.AssetToolsHelpers.get_asset_tools()
+    imported = atools.import_assets_with_dialog("/Game/Textures")
+    
+    if not imported:
+        unreal.log("⚠️ No target folder selected. Aborting.")
+        return
+    
+    # Get imported textures
+    target_textures = [asset for asset in imported if isinstance(asset, unreal.Texture2D)]
+    
+    if not target_textures:
+        unreal.log_error(f"❌ No textures in imported assets")
+        return
+    
+    # Check for height maps in targets
+    height_maps = [tex for tex in target_textures if _is_height_texture(tex.get_name())]
+    if not height_maps:
+        unreal.log_warning("⚠️ No height/displacement maps found in target textures!")
+        return
+    
+    unreal.log(f"🏔️ Found {len(height_maps)} height maps in target textures")
+    
+    # Remap nanite instances
+    total_remapped = 0
+    for instance in nanite_instances:
+        unreal.log(f"🔧 Processing nanite instance: {instance.get_name()}...")
+        
+        parent_material = instance.get_editor_property('parent')
+        texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
+        
+        remapped_count = 0
+        
+        for param_name in texture_params:
+            current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, param_name)
+            
+            if current_texture:
+                new_texture = find_best_match(current_texture, target_textures, param_name)
+                
+                if new_texture:
+                    unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
+                    param_emoji = "🏔️" if param_name == "Height" else "✅"
+                    unreal.log(f"  {param_emoji} {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
+                    remapped_count += 1
+        
+        if remapped_count > 0:
+            unreal.EditorAssetLibrary.save_asset(instance.get_path_name())
+            total_remapped += remapped_count
+    
+    unreal.log(f"🏆 Remapped {total_remapped} textures in nanite materials")
 
 # Execute
 if __name__ == "__main__":
