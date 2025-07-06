@@ -1,5 +1,5 @@
 """
-AutoMatty Material Instance Creator with Height Map Support - Smart material instance creation with universal plugin support
+AutoMatty Material Instance Creator with Environment Material Support - Smart material instance creation with universal plugin support
 """
 import unreal
 
@@ -16,7 +16,7 @@ except ImportError as e:
 
 def create_material_instance_smart():
     """
-    Enhanced material instance creator with smart naming, custom paths, and height map support
+    Enhanced material instance creator with environment material support, smart naming, custom paths, and height map support
     """
     
     # 1) Validate selected material
@@ -58,42 +58,60 @@ def create_material_instance_smart():
     
     unreal.log(f"🧠 Smart instance name: {instance_name}")
 
-    # 6) Check if material has height/displacement support (nanite)
-    has_height_param = _material_has_height_parameter(base_mat)
+    # 6) Check material capabilities
+    texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(base_mat)
+    has_height_param = "Height" in texture_params
     
-    # 7) Use config utility to match textures (include height if material supports it)
-    matched_textures = AutoMattyUtils.match_textures_to_params(textures, include_height=has_height_param)
+    # 7) Detect material type
+    is_environment = any(param.endswith('A') or param.endswith('B') for param in texture_params if param.startswith(('Color', 'Normal', 'Roughness', 'Metallic')))
+    material_type = "environment" if is_environment else None
+    
+    if is_environment:
+        unreal.log(f"🌍 Detected environment material with A/B texture sets")
+    
+    # 8) Use enhanced texture matching
+    matched_textures = _match_textures_enhanced(
+        textures, 
+        include_height=has_height_param,
+        material_type=material_type
+    )
     
     if not matched_textures:
         unreal.log_warning("⚠️ No matching textures found for material parameters.")
         return
 
-    # 8) Determine workflow and log height map detection
-    split_keys = {"Occlusion", "Roughness", "Metallic"}
-    has_split = any(k in matched_textures for k in split_keys)
-    has_orm = "ORM" in matched_textures
-    has_height = "Height" in matched_textures
-
-    if has_split:
-        to_set = ["Color", "Normal", "Occlusion", "Roughness", "Metallic", "Emission"]
-        workflow = "split"
-    elif has_orm:
-        to_set = ["Color", "Normal", "ORM", "Emission"]
-        workflow = "orm"
-    else:
+    # 9) Determine workflow and log findings
+    if is_environment:
+        workflow = "environment"
         to_set = list(matched_textures.keys())
-        workflow = "basic"
-    
-    # Add height if available and material supports it
-    if has_height and has_height_param:
-        to_set.append("Height")
-        unreal.log(f"🏔️ Height map detected and will be applied")
-    elif has_height and not has_height_param:
-        unreal.log_warning(f"⚠️ Height map found but material doesn't support displacement")
+        unreal.log(f"🌍 Environment workflow detected")
+    else:
+        # Standard material workflow detection
+        split_keys = {"Occlusion", "Roughness", "Metallic"}
+        has_split = any(k in matched_textures for k in split_keys)
+        has_orm = "ORM" in matched_textures
+        has_height = "Height" in matched_textures
+
+        if has_split:
+            to_set = ["Color", "Normal", "Occlusion", "Roughness", "Metallic", "Emission"]
+            workflow = "split"
+        elif has_orm:
+            to_set = ["Color", "Normal", "ORM", "Emission"]
+            workflow = "orm"
+        else:
+            to_set = list(matched_textures.keys())
+            workflow = "basic"
+        
+        # Add height if available and material supports it
+        if has_height and has_height_param:
+            to_set.append("Height")
+            unreal.log(f"🏔️ Height map detected and will be applied")
+        elif has_height and not has_height_param:
+            unreal.log_warning(f"⚠️ Height map found but material doesn't support displacement")
     
     unreal.log(f"🎯 Detected workflow: {workflow}")
 
-    # 9) Create the Material Instance with smart naming
+    # 10) Create the Material Instance with smart naming
     mic_factory = unreal.MaterialInstanceConstantFactoryNew()
     instance = atools.create_asset(
         instance_name, target_folder,
@@ -102,7 +120,7 @@ def create_material_instance_smart():
     unreal.MaterialEditingLibrary.set_material_instance_parent(instance, base_mat)
     unreal.log(f"🎉 Created smart instance: {instance.get_name()}")
 
-    # 10) Apply matched textures
+    # 11) Apply matched textures
     applied_count = 0
     for param in to_set:
         texture = matched_textures.get(param)
@@ -111,22 +129,110 @@ def create_material_instance_smart():
                 unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(
                     instance, param, texture
                 )
-                param_emoji = "🏔️" if param == "Height" else "✅"
+                param_emoji = "🏔️" if param == "Height" else "🌍" if param.endswith(('A', 'B')) or param == "BlendMask" else "✅"
                 unreal.log(f"{param_emoji} Set '{param}' → {texture.get_name()}")
                 applied_count += 1
             except Exception as e:
                 unreal.log_warning(f"⚠️ Failed to set {param}: {str(e)}")
 
-    # 11) Save it
+    # 12) Save it
     unreal.EditorAssetLibrary.save_asset(instance.get_path_name())
     unreal.log(f"💾 Saved instance at {instance.get_path_name()}")
     unreal.log(f"🏆 Successfully applied {applied_count} textures to {instance.get_name()}")
     
     return instance
 
+def _match_textures_enhanced(textures, include_height=False, material_type=None):
+    """
+    Enhanced texture matching with environment material support
+    """
+    import re
+    
+    # Standard patterns
+    patterns = AutoMattyConfig.TEXTURE_PATTERNS
+    
+    # Filter patterns based on include_height flag
+    if not include_height and "Height" in patterns:
+        patterns = {k: v for k, v in patterns.items() if k != "Height"}
+    
+    found = {}
+    
+    # Handle environment materials with A/B texture sets
+    if material_type == "environment":
+        # Environment materials need A/B sets plus BlendMask
+        env_patterns = {
+            "ColorA": patterns["Color"],
+            "ColorB": patterns["Color"], 
+            "NormalA": patterns["Normal"],
+            "NormalB": patterns["Normal"],
+            "RoughnessA": patterns["Roughness"],
+            "RoughnessB": patterns["Roughness"],
+            "MetallicA": patterns["Metallic"],
+            "MetallicB": patterns["Metallic"],
+            "BlendMask": re.compile(r"(?:^|[_\W])(?:blend|mask|mix)(?:$|[_\W])", re.IGNORECASE),
+        }
+        
+        # Try to intelligently assign A/B based on filename hints
+        for tex in textures:
+            name = tex.get_name().lower()
+            
+            # Check for explicit A/B markers first
+            for param, pattern in env_patterns.items():
+                if param not in found:
+                    # For A textures, look for 'a', '01', 'first', etc.
+                    if param.endswith('A'):
+                        if pattern.search(name) and any(marker in name for marker in ['_a_', '_a.', '_01_', '_1_', 'first', 'primary']):
+                            found[param] = tex
+                            unreal.log(f"Matched '{tex.get_name()}' -> {param} (explicit A marker)")
+                            break
+                    # For B textures, look for 'b', '02', 'second', etc.
+                    elif param.endswith('B'):
+                        if pattern.search(name) and any(marker in name for marker in ['_b_', '_b.', '_02_', '_2_', 'second', 'secondary']):
+                            found[param] = tex
+                            unreal.log(f"Matched '{tex.get_name()}' -> {param} (explicit B marker)")
+                            break
+                    # BlendMask
+                    elif param == "BlendMask":
+                        if pattern.search(name):
+                            found[param] = tex
+                            unreal.log(f"Matched '{tex.get_name()}' -> {param}")
+                            break
+        
+        # Fallback: assign remaining textures to A set first, then B set
+        for tex in textures:
+            if tex in found.values():
+                continue  # Already assigned
+                
+            name = tex.get_name().lower()
+            for base_type in ["Color", "Normal", "Roughness", "Metallic"]:
+                if base_type in patterns and patterns[base_type].search(name):
+                    # Assign to A first, then B
+                    param_a = f"{base_type}A"
+                    param_b = f"{base_type}B"
+                    
+                    if param_a not in found:
+                        found[param_a] = tex
+                        unreal.log(f"Matched '{tex.get_name()}' -> {param_a} (fallback)")
+                        break
+                    elif param_b not in found:
+                        found[param_b] = tex
+                        unreal.log(f"Matched '{tex.get_name()}' -> {param_b} (fallback)")
+                        break
+    else:
+        # Standard material matching (existing logic)
+        for tex in textures:
+            name = tex.get_name().lower()
+            for param, pattern in patterns.items():
+                if param not in found and pattern.search(name):
+                    found[param] = tex
+                    unreal.log(f"Matched '{tex.get_name()}' -> {param}")
+                    break
+    
+    return found
+
 def create_material_instance_with_browser():
     """
-    Alternative version using content browser selection instead of import with height map support
+    Alternative version using content browser selection instead of import with height map and environment support
     """
     
     # Get selected assets from content browser
@@ -157,11 +263,17 @@ def create_material_instance_with_browser():
         base_mat, textures, material_path
     )
     
-    # Check for height support
-    has_height_param = _material_has_height_parameter(base_mat)
+    # Check for capabilities and material type
+    texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(base_mat)
+    has_height_param = "Height" in texture_params
+    is_environment = any(param.endswith('A') or param.endswith('B') for param in texture_params if param.startswith(('Color', 'Normal', 'Roughness', 'Metallic')))
+    material_type = "environment" if is_environment else None
     
-    # Match and apply textures (same logic as above)
-    matched_textures = AutoMattyUtils.match_textures_to_params(textures, include_height=has_height_param)
+    if is_environment:
+        unreal.log(f"🌍 Detected environment material with A/B texture sets")
+    
+    # Match and apply textures
+    matched_textures = _match_textures_enhanced(textures, include_height=has_height_param, material_type=material_type)
     
     if not matched_textures:
         unreal.log_warning("⚠️ No matching textures found")
@@ -183,7 +295,7 @@ def create_material_instance_with_browser():
             unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(
                 instance, param, texture
             )
-            param_emoji = "🏔️" if param == "Height" else "✅"
+            param_emoji = "🏔️" if param == "Height" else "🌍" if param.endswith(('A', 'B')) or param == "BlendMask" else "✅"
             unreal.log(f"{param_emoji} Set '{param}' → {texture.get_name()}")
             applied_count += 1
         except Exception as e:
@@ -197,7 +309,7 @@ def create_material_instance_with_browser():
 
 def create_material_instance_from_recent():
     """
-    Create instance from recently imported textures with height map support (good for drag-drop workflow)
+    Create instance from recently imported textures with height map and environment support (good for drag-drop workflow)
     """
     
     # Get selected material
@@ -233,10 +345,16 @@ def create_material_instance_from_recent():
         base_mat, textures, material_path
     )
     
-    # Check for height support
-    has_height_param = _material_has_height_parameter(base_mat)
+    # Check capabilities and material type
+    texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(base_mat)
+    has_height_param = "Height" in texture_params
+    is_environment = any(param.endswith('A') or param.endswith('B') for param in texture_params if param.startswith(('Color', 'Normal', 'Roughness', 'Metallic')))
+    material_type = "environment" if is_environment else None
     
-    matched_textures = AutoMattyUtils.match_textures_to_params(textures, include_height=has_height_param)
+    if is_environment:
+        unreal.log(f"🌍 Detected environment material with A/B texture sets")
+    
+    matched_textures = _match_textures_enhanced(textures, include_height=has_height_param, material_type=material_type)
     
     if not matched_textures:
         unreal.log_warning("⚠️ No matching textures found")
@@ -258,7 +376,7 @@ def create_material_instance_from_recent():
             unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(
                 instance, param, texture
             )
-            param_emoji = "🏔️" if param == "Height" else "✅"
+            param_emoji = "🏔️" if param == "Height" else "🌍" if param.endswith(('A', 'B')) or param == "BlendMask" else "✅"
             unreal.log(f"{param_emoji} Set '{param}' → {texture.get_name()}")
             applied_count += 1
         except Exception as e:

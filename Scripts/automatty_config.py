@@ -1,5 +1,5 @@
 """
-AutoMatty Configuration and Utilities with Height Map Support
+AutoMatty Configuration and Utilities with Height Map and Environment Support
 Centralized config with UI integration and smart naming
 """
 import unreal
@@ -41,7 +41,7 @@ class AutoMattyConfig:
     CUSTOM_TEXTURE_PATH_KEY = "CustomTexturePath"
     CUSTOM_MATERIAL_PREFIX_KEY = "CustomMaterialPrefix"
     
-    # Texture matching patterns - UPDATED WITH HEIGHT SUPPORT
+    # Texture matching patterns - UPDATED WITH HEIGHT AND BLEND SUPPORT
     TEXTURE_PATTERNS = {
         "ORM": re.compile(r"(?:^|[_\W])orm(?:$|[_\W])|occlusion[-_]?roughness[-_]?metal(?:lic|ness)", re.IGNORECASE),
         "Color": re.compile(r"(colou?r|albedo|base[-_]?color|diffuse)", re.IGNORECASE),
@@ -51,6 +51,7 @@ class AutoMattyConfig:
         "Metallic": re.compile(r"metal(?:lic|ness)", re.IGNORECASE),
         "Height": re.compile(r"(?:^|[_\W])(?:height|disp|displacement)(?:$|[_\W])", re.IGNORECASE),
         "Emission": re.compile(r"(?:^|[_\W])(?:emission|emissive|glow)(?:$|[_\W])", re.IGNORECASE),
+        "BlendMask": re.compile(r"(?:^|[_\W])(?:blend|mask|mix)(?:$|[_\W])", re.IGNORECASE),
     }
     
     @staticmethod
@@ -210,7 +211,7 @@ class AutoMattyConfig:
             return False
 
 class AutoMattyUtils:
-    """Utility functions for AutoMatty with enhanced smart naming and height map support"""
+    """Utility functions for AutoMatty with enhanced smart naming and environment support"""
     
     @staticmethod
     def get_user_path(prompt_text, default_path):
@@ -264,10 +265,11 @@ class AutoMattyUtils:
         return unreal.EditorAssetLibrary.does_asset_exist(func_path)
     
     @staticmethod
-    def match_textures_to_params(textures, patterns=None, include_height=False):
+    def match_textures_to_params(textures, patterns=None, include_height=False, material_type=None):
         """
         Match texture list to material parameters
         include_height: If True, includes Height in matching (for nanite materials)
+        material_type: 'environment' for A/B texture sets, None for standard
         """
         if patterns is None:
             patterns = AutoMattyConfig.TEXTURE_PATTERNS
@@ -277,13 +279,77 @@ class AutoMattyUtils:
             patterns = {k: v for k, v in patterns.items() if k != "Height"}
         
         found = {}
-        for tex in textures:
-            name = tex.get_name().lower()
-            for param, pattern in patterns.items():
-                if param not in found and pattern.search(name):
-                    found[param] = tex
-                    unreal.log(f"Matched '{tex.get_name()}' -> {param}")
-                    break
+        
+        # Handle environment materials with A/B texture sets
+        if material_type == "environment":
+            # Environment materials need A/B sets plus BlendMask
+            env_patterns = {
+                "ColorA": patterns["Color"],
+                "ColorB": patterns["Color"], 
+                "NormalA": patterns["Normal"],
+                "NormalB": patterns["Normal"],
+                "RoughnessA": patterns["Roughness"],
+                "RoughnessB": patterns["Roughness"],
+                "MetallicA": patterns["Metallic"],
+                "MetallicB": patterns["Metallic"],
+                "BlendMask": patterns["BlendMask"],
+            }
+            
+            # Try to intelligently assign A/B based on filename hints
+            for tex in textures:
+                name = tex.get_name().lower()
+                
+                # Check for explicit A/B markers first
+                for param, pattern in env_patterns.items():
+                    if param not in found:
+                        # For A textures, look for 'a', '01', 'first', etc.
+                        if param.endswith('A'):
+                            if pattern.search(name) and any(marker in name for marker in ['_a_', '_a.', '_01_', '_1_', 'first', 'primary']):
+                                found[param] = tex
+                                unreal.log(f"Matched '{tex.get_name()}' -> {param} (explicit A marker)")
+                                break
+                        # For B textures, look for 'b', '02', 'second', etc.
+                        elif param.endswith('B'):
+                            if pattern.search(name) and any(marker in name for marker in ['_b_', '_b.', '_02_', '_2_', 'second', 'secondary']):
+                                found[param] = tex
+                                unreal.log(f"Matched '{tex.get_name()}' -> {param} (explicit B marker)")
+                                break
+                        # BlendMask
+                        elif param == "BlendMask":
+                            if pattern.search(name):
+                                found[param] = tex
+                                unreal.log(f"Matched '{tex.get_name()}' -> {param}")
+                                break
+            
+            # Fallback: assign remaining textures to A set first, then B set
+            for tex in textures:
+                if tex in found.values():
+                    continue  # Already assigned
+                    
+                name = tex.get_name().lower()
+                for base_type in ["Color", "Normal", "Roughness", "Metallic"]:
+                    if base_type in patterns and patterns[base_type].search(name):
+                        # Assign to A first, then B
+                        param_a = f"{base_type}A"
+                        param_b = f"{base_type}B"
+                        
+                        if param_a not in found:
+                            found[param_a] = tex
+                            unreal.log(f"Matched '{tex.get_name()}' -> {param_a} (fallback)")
+                            break
+                        elif param_b not in found:
+                            found[param_b] = tex
+                            unreal.log(f"Matched '{tex.get_name()}' -> {param_b} (fallback)")
+                            break
+        else:
+            # Standard material matching (existing logic)
+            for tex in textures:
+                name = tex.get_name().lower()
+                for param, pattern in patterns.items():
+                    if param not in found and pattern.search(name):
+                        found[param] = tex
+                        unreal.log(f"Matched '{tex.get_name()}' -> {param}")
+                        break
         
         return found
     
@@ -328,7 +394,8 @@ class AutoMattyUtils:
             'occlusion', 'ao', 'ambient_occlusion',
             'orm', 'rma', 'mas',  # packed maps
             'height', 'displacement', 'disp',  # height/displacement maps
-            'emission', 'emissive', 'glow'
+            'emission', 'emissive', 'glow',
+            'blend', 'mask', 'mix'  # environment blend masks
         ]
         
         # Create pattern to match any texture type at the end
@@ -436,9 +503,9 @@ def ui_get_current_material_prefix():
     """Get current material prefix for UI display"""
     return AutoMattyConfig.get_custom_material_prefix()
 
-# Test function to validate naming with height maps
+# Test function to validate naming with environment textures
 def test_naming_extraction():
-    """Test the naming extraction with common patterns including height maps"""
+    """Test the naming extraction with common patterns including environment textures"""
     test_cases = [
         "ChrHead_color_1001_sRGB",
         "Wood_Planks_Normal_2K", 
@@ -447,7 +514,10 @@ def test_naming_extraction():
         "Stone_Wall_Height_<udim>",  # Height map test
         "ComplexMaterial_Displacement_v002_1001_sRGB",  # Displacement test
         "SimpleRock_Disp",  # Simple displacement
-        "T_Ground_Mud_D"  # UE convention
+        "T_Ground_Mud_D",  # UE convention
+        "Forest_Color_A_2K",  # Environment A texture
+        "Forest_Color_B_2K",  # Environment B texture
+        "Forest_BlendMask_1K"  # Environment blend mask
     ]
     
     expected = [
@@ -458,7 +528,10 @@ def test_naming_extraction():
         "Stone_Wall",
         "ComplexMaterial",
         "SimpleRock",
-        "Ground_Mud"
+        "Ground_Mud",
+        "Forest",
+        "Forest",
+        "Forest"
     ]
     
     for i, test in enumerate(test_cases):

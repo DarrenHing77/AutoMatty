@@ -1,6 +1,6 @@
 """
 AutoMatty Material Builder - Substrate material creation with universal plugin support and custom prefix
-FINAL VERSION: Proper organization, parameter grouping, comment blocks, world position noise
+FIXED VERSION: Proper color controls, emission fix, simple ENV builder
 """
 import unreal
 
@@ -54,7 +54,6 @@ class SubstrateMaterialBuilder:
         
         # Enable tessellation for nanite if requested
         if use_nanite:
-            # UE 5.6 uses boolean tessellation instead of enum mode
             material.set_editor_property("enable_tessellation", True)
             unreal.log(f"🔧 Enabled tessellation for Nanite support")
         
@@ -90,7 +89,6 @@ class SubstrateMaterialBuilder:
         
         # Enable tessellation for nanite if requested
         if use_nanite:
-            # UE 5.6 uses boolean tessellation instead of enum mode
             material.set_editor_property("enable_tessellation", True)
             unreal.log(f"🔧 Enabled tessellation for Nanite support")
         
@@ -126,7 +124,6 @@ class SubstrateMaterialBuilder:
         
         # Enable tessellation for nanite if requested
         if use_nanite:
-            # UE 5.6 uses boolean tessellation instead of enum mode
             material.set_editor_property("enable_tessellation", True)
             unreal.log(f"🔧 Enabled tessellation for Nanite support")
         
@@ -140,8 +137,8 @@ class SubstrateMaterialBuilder:
         unreal.log(f"✅ Advanced Substrate material '{name}' created in {folder}")
         return material
     
-    def create_environment_material(self, base_name=None, custom_path=None):
-        """Create environment material with proper world-space noise and clean organization"""
+    def create_environment_material(self, base_name=None, custom_path=None, use_adv_env=False):
+        """Create environment material with option for simple or advanced version"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
@@ -149,7 +146,8 @@ class SubstrateMaterialBuilder:
         # Use custom prefix if no base_name provided
         if base_name is None:
             custom_prefix = AutoMattyConfig.get_custom_material_prefix()
-            base_name = f"{custom_prefix}_Environment"
+            env_type = "AdvEnvironment" if use_adv_env else "Environment"
+            base_name = f"{custom_prefix}_{env_type}"
             unreal.log(f"🏷️ Using custom prefix: {base_name}")
         
         folder = custom_path or AutoMattyConfig.get_custom_material_path()
@@ -160,14 +158,18 @@ class SubstrateMaterialBuilder:
             name, folder, unreal.Material, unreal.MaterialFactoryNew()
         )
         
-        # Build the properly organized environment graph
-        self._build_environment_graph_fixed(material)
+        # Build the appropriate environment graph
+        if use_adv_env:
+            self._build_environment_graph_advanced(material)
+            unreal.log(f"✅ Advanced Environment Substrate material '{name}' created in {folder}")
+        else:
+            self._build_environment_graph_simple(material)
+            unreal.log(f"✅ Simple Environment Substrate material '{name}' created in {folder}")
         
         # Compile and save
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
         
-        unreal.log(f"✅ Environment Substrate material '{name}' created in {folder}")
         return material
     
     def _create_comment_block(self, material, text, x, y, width=None, height=None, color=None):
@@ -194,7 +196,7 @@ class SubstrateMaterialBuilder:
         # ========================================
         self._create_comment_block(material, "TEXTURES\n\nColor, ORM/Split, Normal,\nEmission, Height textures\nfor material parameters", -1500, -100, 
                                  color=unreal.LinearColor(0.3, 0.7, 1.0, 0.8))  # Blue
-        self._create_comment_block(material, "COLOR CONTROLS\n\nContrast adjustments\nand power curves", -1200, -100,
+        self._create_comment_block(material, "COLOR CONTROLS\n\nBrightness, Contrast\nHue Shift controls", -1200, -100,
                                  color=unreal.LinearColor(1.0, 0.8, 0.3, 0.8))  # Orange
         self._create_comment_block(material, "ROUGHNESS CONTROLS\n\nMin/Max remapping\nSecond roughness options", -1200, -300,
                                  color=unreal.LinearColor(0.8, 0.3, 1.0, 0.8))  # Purple
@@ -248,6 +250,21 @@ class SubstrateMaterialBuilder:
         # ========================================
         # COLOR CONTROLS
         # ========================================
+        # Brightness control
+        brightness_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -1100, -100
+        )
+        brightness_param.set_editor_property("parameter_name", "Brightness")
+        brightness_param.set_editor_property("default_value", 1.0)
+        brightness_param.set_editor_property("group", "Color")
+        
+        brightness_multiply = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionMultiply, -900, -150
+        )
+        self.lib.connect_material_expressions(samples["Color"], "", brightness_multiply, "A")
+        self.lib.connect_material_expressions(brightness_param, "", brightness_multiply, "B")
+        
+        # Contrast control
         color_contrast_param = self.lib.create_material_expression(
             material, unreal.MaterialExpressionScalarParameter, -1100, -150
         )
@@ -256,10 +273,29 @@ class SubstrateMaterialBuilder:
         color_contrast_param.set_editor_property("group", "Color")
         
         color_power = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionPower, -800, -200
+            material, unreal.MaterialExpressionPower, -750, -150
         )
-        self.lib.connect_material_expressions(samples["Color"], "", color_power, "Base")
+        self.lib.connect_material_expressions(brightness_multiply, "", color_power, "Base")
         self.lib.connect_material_expressions(color_contrast_param, "", color_power, "Exp")
+        
+        # Hue Shift control
+        hue_shift_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -1100, -200
+        )
+        hue_shift_param.set_editor_property("parameter_name", "HueShift")
+        hue_shift_param.set_editor_property("default_value", 0.0)
+        hue_shift_param.set_editor_property("group", "Color")
+        
+        hue_shift_function = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionMaterialFunctionCall, -600, -150
+        )
+        hueshift_func = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions02/HueShift")
+        if hueshift_func:
+            hue_shift_function.set_editor_property("material_function", hueshift_func)
+            self.lib.connect_material_expressions(color_power, "", hue_shift_function, "Texture")
+            self.lib.connect_material_expressions(hue_shift_param, "", hue_shift_function, "Hue Shift Percentage")
+        else:
+            hue_shift_function = color_power
         
         # ========================================
         # ROUGHNESS CONTROLS
@@ -393,7 +429,7 @@ class SubstrateMaterialBuilder:
         mfp_scale.set_editor_property("default_value", 1.0)
         mfp_scale.set_editor_property("group", "SSS")
 
-        self.lib.connect_material_expressions(color_power, "", use_diffuse_switch, "True")
+        self.lib.connect_material_expressions(hue_shift_function, "", use_diffuse_switch, "True")
         self.lib.connect_material_expressions(mfp_color_param, "", use_diffuse_switch, "False")
         
         # ========================================
@@ -461,13 +497,13 @@ class SubstrateMaterialBuilder:
         )
         
         # Connect everything
-        self.lib.connect_material_expressions(color_power, "", slab, "Diffuse Albedo")
+        self.lib.connect_material_expressions(hue_shift_function, "", slab, "Diffuse Albedo")
         self.lib.connect_material_expressions(remap_roughness, "", slab, "Roughness")
         self.lib.connect_material_expressions(metal_final, "", slab, "F0")
         self.lib.connect_material_expressions(samples["Normal"], "", slab, "Normal")
         self.lib.connect_material_expressions(use_diffuse_switch, "", slab, "SSS MFP")
         self.lib.connect_material_expressions(mfp_scale, "", slab, "SSS MFP Scale")
-        self.lib.connect_material_expressions(emission_final, "", slab, "Emission Color")
+        self.lib.connect_material_expressions(emission_final, "", slab, "Emissive Color")
         
         # Connect AO if available (ORM only)
         if ao_final:
@@ -485,8 +521,142 @@ class SubstrateMaterialBuilder:
         if use_nanite and displacement_final:
             self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     
-    def _build_environment_graph_fixed(self, material):
-        """Build environment material with proper organization and world-space noise"""
+    def _build_environment_graph_simple(self, material):
+        """Build simple environment material with single slab and lerp nodes"""
+        default_normal = AutoMattyUtils.find_default_normal()
+        
+        # ========================================
+        # TEXTURES - A and B sets
+        # ========================================
+        texture_coords = {
+            "ColorA": (-1600, -2000),
+            "ColorB": (-1600, -1800),
+            "NormalA": (-1600, -1600),
+            "NormalB": (-1600, -1400),
+            "RoughnessA": (-1600, -1200),
+            "RoughnessB": (-1600, -1000),
+            "MetallicA": (-1600, -800),
+            "MetallicB": (-1600, -600),
+        }
+        
+        samples = {}
+        for param_name, (x, y) in texture_coords.items():
+            tex_node = self.lib.create_material_expression(
+                material, unreal.MaterialExpressionTextureSampleParameter2D, x, y
+            )
+            tex_node.set_editor_property("parameter_name", param_name)
+            if "Normal" in param_name:
+                tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+                if default_normal:
+                    tex_node.set_editor_property("texture", default_normal)
+            samples[param_name] = tex_node
+        
+        # ========================================
+        # BLEND MASK
+        # ========================================
+        blend_mask = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionTextureSampleParameter2D, -1600, -1000
+        )
+        blend_mask.set_editor_property("parameter_name", "BlendMask")
+        
+        # ========================================
+        # LERP NODES
+        # ========================================
+        color_lerp = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionLinearInterpolate, -1200, -250
+        )
+        self.lib.connect_material_expressions(samples["ColorA"], "", color_lerp, "A")
+        self.lib.connect_material_expressions(samples["ColorB"], "", color_lerp, "B")
+        self.lib.connect_material_expressions(blend_mask, "", color_lerp, "Alpha")
+        
+        normal_lerp = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionLinearInterpolate, -1200, -450
+        )
+        self.lib.connect_material_expressions(samples["NormalA"], "", normal_lerp, "A")
+        self.lib.connect_material_expressions(samples["NormalB"], "", normal_lerp, "B")
+        self.lib.connect_material_expressions(blend_mask, "", normal_lerp, "Alpha")
+        
+        roughness_lerp = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionLinearInterpolate, -1200, -650
+        )
+        self.lib.connect_material_expressions(samples["RoughnessA"], "", roughness_lerp, "A")
+        self.lib.connect_material_expressions(samples["RoughnessB"], "", roughness_lerp, "B")
+        self.lib.connect_material_expressions(blend_mask, "", roughness_lerp, "Alpha")
+        
+        metallic_lerp = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionLinearInterpolate, -1200, -850
+        )
+        self.lib.connect_material_expressions(samples["MetallicA"], "", metallic_lerp, "A")
+        self.lib.connect_material_expressions(samples["MetallicB"], "", metallic_lerp, "B")
+        self.lib.connect_material_expressions(blend_mask, "", metallic_lerp, "Alpha")
+        
+        # ========================================
+        # COLOR CONTROLS
+        # ========================================
+        brightness_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -900, -200
+        )
+        brightness_param.set_editor_property("parameter_name", "Brightness")
+        brightness_param.set_editor_property("default_value", 1.0)
+        brightness_param.set_editor_property("group", "Color")
+        
+        brightness_multiply = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionMultiply, -750, -250
+        )
+        self.lib.connect_material_expressions(color_lerp, "", brightness_multiply, "A")
+        self.lib.connect_material_expressions(brightness_param, "", brightness_multiply, "B")
+        
+        contrast_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -900, -250
+        )
+        contrast_param.set_editor_property("parameter_name", "ColorContrast")
+        contrast_param.set_editor_property("default_value", 1.0)
+        contrast_param.set_editor_property("group", "Color")
+        
+        contrast_power = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionPower, -600, -250
+        )
+        self.lib.connect_material_expressions(brightness_multiply, "", contrast_power, "Base")
+        self.lib.connect_material_expressions(contrast_param, "", contrast_power, "Exp")
+        
+        hue_shift_param = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionScalarParameter, -900, -300
+        )
+        hue_shift_param.set_editor_property("parameter_name", "HueShift")
+        hue_shift_param.set_editor_property("default_value", 0.0)
+        hue_shift_param.set_editor_property("group", "Color")
+        
+        hue_shift_function = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionMaterialFunctionCall, -450, -250
+        )
+        hueshift_func = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions02/HueShift")
+        if hueshift_func:
+            hue_shift_function.set_editor_property("material_function", hueshift_func)
+            self.lib.connect_material_expressions(contrast_power, "", hue_shift_function, "Texture")
+            self.lib.connect_material_expressions(hue_shift_param, "", hue_shift_function, "Hue Shift Percentage")
+        else:
+            hue_shift_function = contrast_power
+        
+        # ========================================
+        # SUBSTRATE SLAB
+        # ========================================
+        slab = self.lib.create_material_expression(
+            material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -500
+        )
+        
+        # Connect everything
+        self.lib.connect_material_expressions(hue_shift_function, "", slab, "Diffuse Albedo")
+        self.lib.connect_material_expressions(normal_lerp, "", slab, "Normal")
+        self.lib.connect_material_expressions(roughness_lerp, "", slab, "Roughness")
+        self.lib.connect_material_expressions(metallic_lerp, "", slab, "F0")
+        
+        # Connect to output
+        self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
+        
+        unreal.log("✅ Simple Environment material created with lerp-based blending")
+    
+    def _build_environment_graph_advanced(self, material):
+        """Build advanced environment material with proper organization and world-space noise"""
         default_normal = AutoMattyUtils.find_default_normal()
         
         # ========================================
@@ -496,7 +666,7 @@ class SubstrateMaterialBuilder:
             material, unreal.MaterialExpressionTextureCoordinate, -2000, 0
         )
         
-        # World position for noise (FIXED!)
+        # World position for noise
         world_pos = self.lib.create_material_expression(
             material, unreal.MaterialExpressionWorldPosition, -2000, 400
         )
@@ -509,7 +679,7 @@ class SubstrateMaterialBuilder:
             material, unreal.MaterialExpressionScalarParameter, -1600, 400
         )
         noise_scale_1.set_editor_property("parameter_name", "NoiseScale1")
-        noise_scale_1.set_editor_property("default_value", 500.0)  # World scale
+        noise_scale_1.set_editor_property("default_value", 500.0)
         noise_scale_1.set_editor_property("group", "Noise")
         
         noise_multiply_1 = self.lib.create_material_expression(
@@ -530,7 +700,7 @@ class SubstrateMaterialBuilder:
             material, unreal.MaterialExpressionScalarParameter, -1600, 600
         )
         noise_scale_2.set_editor_property("parameter_name", "NoiseScale2")
-        noise_scale_2.set_editor_property("default_value", 150.0)  # World scale
+        noise_scale_2.set_editor_property("default_value", 150.0)
         noise_scale_2.set_editor_property("group", "Noise")
         
         noise_multiply_2 = self.lib.create_material_expression(
@@ -781,7 +951,7 @@ class SubstrateMaterialBuilder:
         # Connect to output
         self.lib.connect_material_property(slab_mix, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
         
-        unreal.log("✅ Environment material created with proper world-space noise and organized parameters")
+        unreal.log("✅ Advanced Environment material created with proper world-space noise and organized parameters")
 
 # Usage functions with new parameters
 def create_orm_material_with_second_roughness():
@@ -829,12 +999,17 @@ def create_advanced_material_full_featured():
     builder = SubstrateMaterialBuilder()
     return builder.create_advanced_material(use_second_roughness=True, use_nanite=True)
 
-def create_environment_material_fixed():
-    """Create the fixed environment material"""
+def create_environment_material_simple():
+    """Create simple environment material with lerp nodes"""
     builder = SubstrateMaterialBuilder()
-    return builder.create_environment_material()
+    return builder.create_environment_material(use_adv_env=False)
+
+def create_environment_material_advanced():
+    """Create advanced environment material with noise mixing"""
+    builder = SubstrateMaterialBuilder()
+    return builder.create_environment_material(use_adv_env=True)
 
 # Execute based on what you want
 if __name__ == "__main__":
     builder = SubstrateMaterialBuilder()
-    builder.create_environment_material()
+    builder.create_environment_material(use_adv_env=False)
