@@ -192,21 +192,21 @@ class SubstrateMaterialBuilder:
         # ========================================
         # COMMENT BLOCKS FOR VISUAL ORGANIZATION
         # ========================================
-        self._create_comment_block(material, "TEXTURES", -1500, -100, 
+        self._create_comment_block(material, "TEXTURES\n\nColor, ORM/Split, Normal,\nEmission, Height textures\nfor material parameters", -1500, -100, 
                                  color=unreal.LinearColor(0.3, 0.7, 1.0, 0.8))  # Blue
-        self._create_comment_block(material, "COLOR CONTROLS", -1200, -100,
+        self._create_comment_block(material, "COLOR CONTROLS\n\nContrast adjustments\nand power curves", -1200, -100,
                                  color=unreal.LinearColor(1.0, 0.8, 0.3, 0.8))  # Orange
-        self._create_comment_block(material, "ROUGHNESS CONTROLS", -1200, -300,
+        self._create_comment_block(material, "ROUGHNESS CONTROLS\n\nMin/Max remapping\nSecond roughness options", -1200, -300,
                                  color=unreal.LinearColor(0.8, 0.3, 1.0, 0.8))  # Purple
-        self._create_comment_block(material, "METALLIC & AO", -1200, -550,
+        self._create_comment_block(material, "METALLIC & AO\n\nIntensity controls\nORM channel masks", -1200, -550,
                                  color=unreal.LinearColor(0.7, 0.7, 0.7, 0.8))  # Gray
-        self._create_comment_block(material, "EMISSION & SSS", -1200, -700,
+        self._create_comment_block(material, "EMISSION & SSS\n\nEmission intensity\nSSS/MFP controls", -1200, -700,
                                  color=unreal.LinearColor(1.0, 0.3, 0.3, 0.8))  # Red
-        self._create_comment_block(material, "SUBSTRATE SLAB", -300, -300,
+        self._create_comment_block(material, "SUBSTRATE SLAB\n\nFinal material output", -300, -300,
                                  color=unreal.LinearColor(0.2, 0.8, 0.2, 0.8))  # Green
         
         if use_nanite:
-            self._create_comment_block(material, "NANITE DISPLACEMENT", -1200, -850,
+            self._create_comment_block(material, "NANITE DISPLACEMENT\n\nHeight texture processing\nWorld position offset", -1200, -850,
                                      color=unreal.LinearColor(1.0, 0.2, 1.0, 0.8))  # Magenta
         
         # ========================================
@@ -488,30 +488,6 @@ class SubstrateMaterialBuilder:
     def _build_environment_graph_fixed(self, material):
         """Build environment material with proper organization and world-space noise"""
         default_normal = AutoMattyUtils.find_default_normal()
-        
-        # ========================================
-        # COMMENT BLOCKS FOR VISUAL ORGANIZATION
-        # ========================================
-        self._create_comment_block(material, "UV/TEXTURE VARIATION", -2100, -100,
-                                 color=unreal.LinearColor(0.3, 0.7, 1.0, 0.8))  # Blue
-        self._create_comment_block(material, "NOISE GENERATION", -1800, 300,
-                                 color=unreal.LinearColor(1.0, 1.0, 0.3, 0.8))  # Yellow
-        self._create_comment_block(material, "SLAB A TEXTURES", -1700, -500,
-                                 color=unreal.LinearColor(0.3, 1.0, 0.3, 0.8))  # Green
-        self._create_comment_block(material, "SLAB B TEXTURES", -1700, -1300,
-                                 color=unreal.LinearColor(0.3, 1.0, 0.8, 0.8))  # Cyan
-        self._create_comment_block(material, "COLOR A CONTROLS", -1300, -400,
-                                 color=unreal.LinearColor(1.0, 0.8, 0.3, 0.8))  # Orange
-        self._create_comment_block(material, "COLOR B CONTROLS", -1300, -1200,
-                                 color=unreal.LinearColor(1.0, 0.6, 0.1, 0.8))  # Dark Orange
-        self._create_comment_block(material, "ROUGHNESS A CONTROLS", -1100, -700,
-                                 color=unreal.LinearColor(0.8, 0.3, 1.0, 0.8))  # Purple
-        self._create_comment_block(material, "ROUGHNESS B CONTROLS", -1100, -1500,
-                                 color=unreal.LinearColor(0.6, 0.1, 0.8, 0.8))  # Dark Purple
-        self._create_comment_block(material, "SUBSTRATE SLABS", -300, -800,
-                                 color=unreal.LinearColor(0.2, 0.8, 0.2, 0.8))  # Green
-        self._create_comment_block(material, "SLAB MIXING", 100, -1300,
-                                 color=unreal.LinearColor(1.0, 0.3, 0.3, 0.8))  # Red
         
         # ========================================
         # UV/TEXTURE VARIATION
