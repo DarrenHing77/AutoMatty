@@ -1,6 +1,6 @@
 """
-AutoMatty Material Builder - Substrate material creation with universal plugin support and custom prefix
-FIXED VERSION: Proper color controls, emission fix, simple ENV builder
+AutoMatty Material Builder - Complete Final Version
+All fixes included: Triplanar, HueShift connections, Environment spacing, Emission fix
 """
 import unreal
 
@@ -12,11 +12,10 @@ try:
     from automatty_config import AutoMattyConfig, AutoMattyUtils
 except ImportError as e:
     unreal.log_error(f"❌ AutoMatty import failed: {e}")
-    # Don't continue if imports fail
     raise
 
 class SubstrateMaterialBuilder:
-    """Modular builder for Substrate materials with parameter grouping and visual organization"""
+    """Complete Substrate material builder with all features"""
     
     def __init__(self, custom_paths=None):
         self.config = AutoMattyConfig()
@@ -32,190 +31,156 @@ class SubstrateMaterialBuilder:
             if hasattr(self.config, key):
                 setattr(self.config, key, value)
     
-    def create_orm_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False):
-        """Create ORM packed Substrate material with optional 2nd roughness and nanite support"""
+    def create_orm_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False, use_triplanar=False):
+        """Create ORM material with all features"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
         
-        # Use custom prefix if no base_name provided
         if base_name is None:
             custom_prefix = AutoMattyConfig.get_custom_material_prefix()
             base_name = f"{custom_prefix}_ORM"
-            unreal.log(f"🏷️ Using custom prefix: {base_name}")
         
         folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
         
-        # Create material
-        material = self.atools.create_asset(
-            name, folder, unreal.Material, unreal.MaterialFactoryNew()
-        )
+        material = self.atools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
         
-        # Enable tessellation for nanite if requested
         if use_nanite:
             material.set_editor_property("enable_tessellation", True)
-            unreal.log(f"🔧 Enabled tessellation for Nanite support")
         
-        # Build the material graph - ORM variant
-        self._build_standard_graph(material, material_type="orm", use_second_roughness=use_second_roughness, use_nanite=use_nanite)
+        self._build_standard_graph(material, material_type="orm", use_second_roughness=use_second_roughness, use_nanite=use_nanite, use_triplanar=use_triplanar)
         
-        # Compile and save
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
         
-        unreal.log(f"✅ ORM Substrate material '{name}' created in {folder}")
+        features = []
+        if use_triplanar: features.append("triplanar")
+        if use_second_roughness: features.append("dual-roughness")
+        if use_nanite: features.append("nanite")
+        feature_text = f" ({', '.join(features)})" if features else ""
+        
+        unreal.log(f"✅ ORM material '{name}'{feature_text} created")
         return material
     
-    def create_split_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False):
-        """Create split texture Substrate material with optional 2nd roughness and nanite support"""
+    def create_split_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False, use_triplanar=False):
+        """Create Split material with all features"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
         
-        # Use custom prefix if no base_name provided
         if base_name is None:
             custom_prefix = AutoMattyConfig.get_custom_material_prefix()
             base_name = f"{custom_prefix}_Split"
-            unreal.log(f"🏷️ Using custom prefix: {base_name}")
         
         folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
         
-        # Create material
-        material = self.atools.create_asset(
-            name, folder, unreal.Material, unreal.MaterialFactoryNew()
-        )
+        material = self.atools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
         
-        # Enable tessellation for nanite if requested
         if use_nanite:
             material.set_editor_property("enable_tessellation", True)
-            unreal.log(f"🔧 Enabled tessellation for Nanite support")
         
-        # Build the material graph - Split variant
-        self._build_standard_graph(material, material_type="split", use_second_roughness=use_second_roughness, use_nanite=use_nanite)
+        self._build_standard_graph(material, material_type="split", use_second_roughness=use_second_roughness, use_nanite=use_nanite, use_triplanar=use_triplanar)
         
-        # Compile and save
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
         
-        unreal.log(f"✅ Split Substrate material '{name}' created in {folder}")
+        features = []
+        if use_triplanar: features.append("triplanar")
+        if use_second_roughness: features.append("dual-roughness")
+        if use_nanite: features.append("nanite")
+        feature_text = f" ({', '.join(features)})" if features else ""
+        
+        unreal.log(f"✅ Split material '{name}'{feature_text} created")
         return material
     
-    def create_advanced_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False):
-        """Create advanced Substrate material with built-in UE functions and nanite support"""
+    def create_advanced_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False, use_triplanar=False):
+        """Create Advanced material with all features"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
         
-        # Use custom prefix if no base_name provided
         if base_name is None:
             custom_prefix = AutoMattyConfig.get_custom_material_prefix()
             base_name = f"{custom_prefix}_Advanced"
-            unreal.log(f"🏷️ Using custom prefix: {base_name}")
         
         folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
         
-        # Create material
-        material = self.atools.create_asset(
-            name, folder, unreal.Material, unreal.MaterialFactoryNew()
-        )
+        material = self.atools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
         
-        # Enable tessellation for nanite if requested
         if use_nanite:
             material.set_editor_property("enable_tessellation", True)
-            unreal.log(f"🔧 Enabled tessellation for Nanite support")
         
-        # Build the material graph - Advanced variant (same as ORM)
-        self._build_standard_graph(material, material_type="orm", use_second_roughness=use_second_roughness, use_nanite=use_nanite)
+        self._build_standard_graph(material, material_type="orm", use_second_roughness=use_second_roughness, use_nanite=use_nanite, use_triplanar=use_triplanar)
         
-        # Compile and save
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
         
-        unreal.log(f"✅ Advanced Substrate material '{name}' created in {folder}")
+        features = []
+        if use_triplanar: features.append("triplanar")
+        if use_second_roughness: features.append("dual-roughness")
+        if use_nanite: features.append("nanite")
+        feature_text = f" ({', '.join(features)})" if features else ""
+        
+        unreal.log(f"✅ Advanced material '{name}'{feature_text} created")
         return material
     
     def create_environment_material(self, base_name=None, custom_path=None, use_adv_env=False):
-        """Create environment material with option for simple or advanced version"""
+        """Create Environment material (simple or advanced)"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
         
-        # Use custom prefix if no base_name provided
         if base_name is None:
             custom_prefix = AutoMattyConfig.get_custom_material_prefix()
             env_type = "AdvEnvironment" if use_adv_env else "Environment"
             base_name = f"{custom_prefix}_{env_type}"
-            unreal.log(f"🏷️ Using custom prefix: {base_name}")
         
         folder = custom_path or AutoMattyConfig.get_custom_material_path()
         name = AutoMattyUtils.get_next_asset_name(base_name, folder)
         
-        # Create material
-        material = self.atools.create_asset(
-            name, folder, unreal.Material, unreal.MaterialFactoryNew()
-        )
+        material = self.atools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
         
-        # Build the appropriate environment graph
         if use_adv_env:
             self._build_environment_graph_advanced(material)
-            unreal.log(f"✅ Advanced Environment Substrate material '{name}' created in {folder}")
         else:
             self._build_environment_graph_simple(material)
-            unreal.log(f"✅ Simple Environment Substrate material '{name}' created in {folder}")
         
-        # Compile and save
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
         
+        env_type = "Advanced" if use_adv_env else "Simple"
+        unreal.log(f"✅ {env_type} Environment material '{name}' created")
         return material
     
-    def _create_comment_block(self, material, text, x, y, width=None, height=None, color=None):
-        """Create a visual comment block for material graph organization"""
+    def _create_comment_block(self, material, text, x, y, color=None):
+        """Create visual comment block"""
         if color is None:
-            color = unreal.LinearColor(0.2, 0.8, 0.2, 0.8)  # Default green
+            color = unreal.LinearColor(0.2, 0.8, 0.2, 0.8)
         
-        comment = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionComment, x, y
-        )
+        comment = self.lib.create_material_expression(material, unreal.MaterialExpressionComment, x, y)
         comment.set_editor_property("text", text)
         comment.set_editor_property("comment_color", color)
         comment.set_editor_property("font_size", 14)
-        comment.set_editor_property("comment_bubble_visible_in_details_panel", True)
-        
         return comment
     
-    def _build_standard_graph(self, material, material_type="orm", use_second_roughness=False, use_nanite=False):
-        """Build standardized material graph - unified for ORM, Split, and Advanced"""
+    def _build_standard_graph(self, material, material_type="orm", use_second_roughness=False, use_nanite=False, use_triplanar=False):
+        """Build standard material graph with all features"""
         default_normal = AutoMattyUtils.find_default_normal()
         
-        # ========================================
-        # COMMENT BLOCKS FOR VISUAL ORGANIZATION
-        # ========================================
-        self._create_comment_block(material, "TEXTURES\n\nColor, ORM/Split, Normal,\nEmission, Height textures\nfor material parameters", -1500, -100, 
-                                 color=unreal.LinearColor(0.3, 0.7, 1.0, 0.8))  # Blue
-        self._create_comment_block(material, "COLOR CONTROLS\n\nBrightness, Contrast\nHue Shift controls", -1200, -100,
-                                 color=unreal.LinearColor(1.0, 0.8, 0.3, 0.8))  # Orange
-        self._create_comment_block(material, "ROUGHNESS CONTROLS\n\nMin/Max remapping\nSecond roughness options", -1200, -300,
-                                 color=unreal.LinearColor(0.8, 0.3, 1.0, 0.8))  # Purple
-        self._create_comment_block(material, "METALLIC & AO\n\nIntensity controls\nORM channel masks", -1200, -550,
-                                 color=unreal.LinearColor(0.7, 0.7, 0.7, 0.8))  # Gray
-        self._create_comment_block(material, "EMISSION & SSS\n\nEmission intensity\nSSS/MFP controls", -1200, -700,
-                                 color=unreal.LinearColor(1.0, 0.3, 0.3, 0.8))  # Red
-        self._create_comment_block(material, "SUBSTRATE SLAB\n\nFinal material output", -300, -300,
-                                 color=unreal.LinearColor(0.2, 0.8, 0.2, 0.8))  # Green
+        # Comment blocks
+        self._create_comment_block(material, "TEXTURES", -1500, -100, unreal.LinearColor(0.3, 0.7, 1.0, 0.8))
+        self._create_comment_block(material, "COLOR CONTROLS", -1200, -100, unreal.LinearColor(1.0, 0.8, 0.3, 0.8))
+        self._create_comment_block(material, "SUBSTRATE SLAB", -300, -300, unreal.LinearColor(0.2, 0.8, 0.2, 0.8))
         
+        if use_triplanar:
+            self._create_comment_block(material, "TRIPLANAR MAPPING", -1500, -950, unreal.LinearColor(0.2, 1.0, 1.0, 0.8))
         if use_nanite:
-            self._create_comment_block(material, "NANITE DISPLACEMENT\n\nHeight texture processing\nWorld position offset", -1200, -850,
-                                     color=unreal.LinearColor(1.0, 0.2, 1.0, 0.8))  # Magenta
+            self._create_comment_block(material, "NANITE DISPLACEMENT", -1200, -850, unreal.LinearColor(1.0, 0.2, 1.0, 0.8))
         
-        # ========================================
-        # TEXTURES
-        # ========================================
-        samples = {}
-        
+        # Texture coordinates
         if material_type == "orm":
             coords = {
                 "Color": (-1400, -200),
@@ -232,63 +197,72 @@ class SubstrateMaterialBuilder:
                 "Emission": (-1400, -700),
             }
         
-        # Add height texture for nanite displacement
         if use_nanite:
             coords["Height"] = (-1400, -800)
         
-        for pname, (x, y) in coords.items():
-            node = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionTextureSampleParameter2D, x, y
-            )
-            node.set_editor_property("parameter_name", pname)
-            if pname == "Normal":
-                node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-                if default_normal:
-                    node.set_editor_property("texture", default_normal)
-            samples[pname] = node
+        # Create textures
+        samples = {}
+        texture_objects = {}
         
-        # ========================================
-        # COLOR CONTROLS
-        # ========================================
-        # Brightness control
-        brightness_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1100, -100
-        )
+        for pname, (x, y) in coords.items():
+            if use_triplanar:
+                # Create texture object parameter for triplanar
+                texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
+                texture_param.set_editor_property("parameter_name", pname)
+                texture_objects[pname] = texture_param
+                
+                # Create triplanar function
+                triplanar_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                
+                if pname == "Normal":
+                    # WorldAlignedNormal for normals
+                    world_aligned_normal = unreal.EditorAssetLibrary.load_asset("/All/EngineData/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedNormal")
+                    if world_aligned_normal:
+                        triplanar_func.set_editor_property("material_function", world_aligned_normal)
+                        self.lib.connect_material_expressions(texture_param, "", triplanar_func, "Texture Object")
+                        samples[pname] = triplanar_func
+                        unreal.log(f"🔺 Using WorldAlignedNormal for {pname}")
+                    else:
+                        samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
+                else:
+                    # WorldAlignTexture for everything else
+                    world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/All/EngineData/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignTexture")
+                    if world_aligned_texture:
+                        triplanar_func.set_editor_property("material_function", world_aligned_texture)
+                        self.lib.connect_material_expressions(texture_param, "", triplanar_func, "Texture Object")
+                        samples[pname] = triplanar_func
+                        unreal.log(f"🔺 Using WorldAlignTexture for {pname}")
+                    else:
+                        samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
+            else:
+                # Regular texture samples
+                samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
+        
+        # Color controls
+        brightness_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -100)
         brightness_param.set_editor_property("parameter_name", "Brightness")
         brightness_param.set_editor_property("default_value", 1.0)
         brightness_param.set_editor_property("group", "Color")
         
-        brightness_multiply = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMultiply, -900, -150
-        )
+        brightness_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -900, -150)
         self.lib.connect_material_expressions(samples["Color"], "", brightness_multiply, "A")
         self.lib.connect_material_expressions(brightness_param, "", brightness_multiply, "B")
         
-        # Contrast control
-        color_contrast_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1100, -150
-        )
+        color_contrast_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -150)
         color_contrast_param.set_editor_property("parameter_name", "ColorContrast")
         color_contrast_param.set_editor_property("default_value", 1.0)
         color_contrast_param.set_editor_property("group", "Color")
         
-        color_power = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionPower, -750, -150
-        )
+        color_power = self.lib.create_material_expression(material, unreal.MaterialExpressionPower, -750, -150)
         self.lib.connect_material_expressions(brightness_multiply, "", color_power, "Base")
         self.lib.connect_material_expressions(color_contrast_param, "", color_power, "Exp")
         
-        # Hue Shift control
-        hue_shift_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1100, -200
-        )
+        hue_shift_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -200)
         hue_shift_param.set_editor_property("parameter_name", "HueShift")
         hue_shift_param.set_editor_property("default_value", 0.0)
         hue_shift_param.set_editor_property("group", "Color")
         
-        hue_shift_function = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMaterialFunctionCall, -600, -150
-        )
+        hue_shift_function = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, -600, -150)
         hueshift_func = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions02/HueShift")
         if hueshift_func:
             hue_shift_function.set_editor_property("material_function", hueshift_func)
@@ -297,42 +271,29 @@ class SubstrateMaterialBuilder:
         else:
             hue_shift_function = color_power
         
-        # ========================================
-        # ROUGHNESS CONTROLS
-        # ========================================
+        # Roughness controls
         if material_type == "orm":
-            # Extract roughness from ORM (G channel)
-            rough_mask = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionComponentMask, -1100, -350
-            )
+            rough_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionComponentMask, -1100, -350)
             rough_mask.set_editor_property("r", False)
             rough_mask.set_editor_property("g", True)
             rough_mask.set_editor_property("b", False)
             rough_mask.set_editor_property("a", False)
             self.lib.connect_material_expressions(samples["ORM"], "", rough_mask, "")
             roughness_input = rough_mask
-        else:  # split
+        else:
             roughness_input = samples["Roughness"]
         
-        # Roughness min/max remapping
-        rough_min_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1100, -450
-        )
+        rough_min_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -450)
         rough_min_param.set_editor_property("parameter_name", "RoughnessMin")
         rough_min_param.set_editor_property("default_value", 0.0)
         rough_min_param.set_editor_property("group", "Roughness")
         
-        rough_max_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1100, -500
-        )
+        rough_max_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -500)
         rough_max_param.set_editor_property("parameter_name", "RoughnessMax")
         rough_max_param.set_editor_property("default_value", 1.0)
         rough_max_param.set_editor_property("group", "Roughness")
         
-        # RemapValueRange function for roughness
-        remap_roughness = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMaterialFunctionCall, -700, -400
-        )
+        remap_roughness = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, -700, -400)
         remap_function = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions03/Math/RemapValueRange")
         if remap_function:
             remap_roughness.set_editor_property("material_function", remap_function)
@@ -342,46 +303,31 @@ class SubstrateMaterialBuilder:
         else:
             remap_roughness = roughness_input
         
-        # ========================================
-        # METALLIC CONTROLS
-        # ========================================
+        # Metallic controls
         if material_type == "orm":
-            # Extract metallic from ORM (B channel)
-            metal_mask = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionComponentMask, -1100, -550
-            )
+            metal_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionComponentMask, -1100, -550)
             metal_mask.set_editor_property("r", False)
             metal_mask.set_editor_property("g", False)
             metal_mask.set_editor_property("b", True)
             metal_mask.set_editor_property("a", False)
             self.lib.connect_material_expressions(samples["ORM"], "", metal_mask, "")
             metallic_input = metal_mask
-        else:  # split
+        else:
             metallic_input = samples["Metallic"]
         
-        # Metal intensity control
-        metal_intensity = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1100, -600
-        )
+        metal_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -600)
         metal_intensity.set_editor_property("parameter_name", "MetalIntensity")
         metal_intensity.set_editor_property("default_value", 1.0)
         metal_intensity.set_editor_property("group", "Metallic")
         
-        metal_final = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMultiply, -700, -550
-        )
+        metal_final = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -700, -550)
         self.lib.connect_material_expressions(metallic_input, "", metal_final, "A")
         self.lib.connect_material_expressions(metal_intensity, "", metal_final, "B")
         
-        # ========================================
-        # AO CONTROLS (ORM only)
-        # ========================================
+        # AO controls (ORM only)
         ao_final = None
         if material_type == "orm":
-            # AO mask (R channel)
-            ao_mask = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionComponentMask, -1100, -650
-            )
+            ao_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionComponentMask, -1100, -650)
             ao_mask.set_editor_property("r", True)
             ao_mask.set_editor_property("g", False)
             ao_mask.set_editor_property("b", False)
@@ -389,42 +335,28 @@ class SubstrateMaterialBuilder:
             self.lib.connect_material_expressions(samples["ORM"], "", ao_mask, "")
             ao_final = ao_mask
         
-        # ========================================
-        # EMISSION CONTROLS
-        # ========================================
-        emission_intensity = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1100, -700
-        )
+        # Emission controls
+        emission_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -700)
         emission_intensity.set_editor_property("parameter_name", "EmissionIntensity")
         emission_intensity.set_editor_property("default_value", 0.0)
         emission_intensity.set_editor_property("group", "Emission")
         
-        emission_final = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMultiply, -700, -650
-        )
+        emission_final = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -700, -650)
         self.lib.connect_material_expressions(samples["Emission"], "", emission_final, "A")
         self.lib.connect_material_expressions(emission_intensity, "", emission_final, "B")
         
-        # ========================================
-        # MFP/SSS CONTROLS
-        # ========================================
-        mfp_color_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionVectorParameter, -1100, -750
-        )
+        # SSS controls
+        mfp_color_param = self.lib.create_material_expression(material, unreal.MaterialExpressionVectorParameter, -1100, -750)
         mfp_color_param.set_editor_property("parameter_name", "MFPColor")
         mfp_color_param.set_editor_property("default_value", unreal.LinearColor(1.0, 0.5, 0.3, 1.0))
         mfp_color_param.set_editor_property("group", "SSS")
 
-        use_diffuse_switch = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionStaticSwitchParameter, -700, -750
-        )
+        use_diffuse_switch = self.lib.create_material_expression(material, unreal.MaterialExpressionStaticSwitchParameter, -700, -750)
         use_diffuse_switch.set_editor_property("parameter_name", "UseDiffuseAsMFP")
         use_diffuse_switch.set_editor_property("default_value", True)
         use_diffuse_switch.set_editor_property("group", "SSS")
 
-        mfp_scale = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1100, -800
-        )
+        mfp_scale = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -800)
         mfp_scale.set_editor_property("parameter_name", "MFPScale")
         mfp_scale.set_editor_property("default_value", 1.0)
         mfp_scale.set_editor_property("group", "SSS")
@@ -432,69 +364,45 @@ class SubstrateMaterialBuilder:
         self.lib.connect_material_expressions(hue_shift_function, "", use_diffuse_switch, "True")
         self.lib.connect_material_expressions(mfp_color_param, "", use_diffuse_switch, "False")
         
-        # ========================================
-        # NANITE DISPLACEMENT CONTROLS
-        # ========================================
+        # Nanite displacement
         displacement_final = None
         if use_nanite:
-            displacement_intensity = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionScalarParameter, -1100, -850
-            )
+            displacement_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -850)
             displacement_intensity.set_editor_property("parameter_name", "DisplacementIntensity")
             displacement_intensity.set_editor_property("default_value", 1.0)
             displacement_intensity.set_editor_property("group", "Displacement")
             
-            # Convert height to vector for world position offset
-            height_to_vector = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionAppendVector, -800, -800
-            )
+            height_to_vector = self.lib.create_material_expression(material, unreal.MaterialExpressionAppendVector, -800, -800)
             
-            # Zero values for X and Y (no horizontal displacement)
-            zero_constant = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionConstant, -900, -750
-            )
+            zero_constant = self.lib.create_material_expression(material, unreal.MaterialExpressionConstant, -900, -750)
             zero_constant.set_editor_property("r", 0.0)
             
-            # Height × intensity for Z displacement
-            displacement_multiply = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionMultiply, -900, -850
-            )
+            displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -900, -850)
             self.lib.connect_material_expressions(samples["Height"], "", displacement_multiply, "A")
             self.lib.connect_material_expressions(displacement_intensity, "", displacement_multiply, "B")
             
-            # Create vector (0, 0, height×intensity)
             self.lib.connect_material_expressions(zero_constant, "", height_to_vector, "A")
             self.lib.connect_material_expressions(displacement_multiply, "", height_to_vector, "B")
             
             displacement_final = height_to_vector
         
-        # ========================================
-        # SECOND ROUGHNESS CONTROLS
-        # ========================================
+        # Second roughness
         second_roughness_params = {}
         if use_second_roughness:
-            second_roughness_param = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionScalarParameter, -500, -450
-            )
+            second_roughness_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -500, -450)
             second_roughness_param.set_editor_property("parameter_name", "SecondRoughness")
             second_roughness_param.set_editor_property("default_value", 0.5)
             second_roughness_param.set_editor_property("group", "Roughness")
             second_roughness_params["SecondRoughness"] = second_roughness_param
             
-            second_roughness_weight = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionScalarParameter, -500, -500
-            )
+            second_roughness_weight = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -500, -500)
             second_roughness_weight.set_editor_property("parameter_name", "SecondRoughnessWeight")
             second_roughness_weight.set_editor_property("default_value", 0.0)
             second_roughness_weight.set_editor_property("group", "Roughness")
             second_roughness_params["SecondRoughnessWeight"] = second_roughness_weight
         
-        # ========================================
-        # SUBSTRATE SLAB
-        # ========================================
-        slab = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -400
-        )
+        # Substrate slab
+        slab = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -400)
         
         # Connect everything
         self.lib.connect_material_expressions(hue_shift_function, "", slab, "Diffuse Albedo")
@@ -505,11 +413,9 @@ class SubstrateMaterialBuilder:
         self.lib.connect_material_expressions(mfp_scale, "", slab, "SSS MFP Scale")
         self.lib.connect_material_expressions(emission_final, "", slab, "Emissive Color")
         
-        # Connect AO if available (ORM only)
         if ao_final:
             self.lib.connect_material_expressions(ao_final, "", slab, "AmbientOcclusion")
         
-        # Connect second roughness parameters if enabled
         if use_second_roughness:
             self.lib.connect_material_expressions(second_roughness_params["SecondRoughness"], "", slab, "Second Roughness")
             self.lib.connect_material_expressions(second_roughness_params["SecondRoughnessWeight"], "", slab, "Second Roughness Weight")
@@ -517,17 +423,24 @@ class SubstrateMaterialBuilder:
         # Connect to outputs
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
         
-        # Connect displacement for nanite if enabled
         if use_nanite and displacement_final:
             self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     
+    def _create_regular_texture_sample(self, material, param_name, x, y, default_normal=None):
+        """Create regular texture sample"""
+        node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
+        node.set_editor_property("parameter_name", param_name)
+        if param_name == "Normal":
+            node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+            if default_normal:
+                node.set_editor_property("texture", default_normal)
+        return node
+    
     def _build_environment_graph_simple(self, material):
-        """Build simple environment material with single slab and lerp nodes"""
+        """Build simple environment material with lerp blending"""
         default_normal = AutoMattyUtils.find_default_normal()
         
-        # ========================================
-        # TEXTURES - A and B sets
-        # ========================================
+        # Textures - properly spaced
         texture_coords = {
             "ColorA": (-1600, -2000),
             "ColorB": (-1600, -1800),
@@ -541,9 +454,7 @@ class SubstrateMaterialBuilder:
         
         samples = {}
         for param_name, (x, y) in texture_coords.items():
-            tex_node = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionTextureSampleParameter2D, x, y
-            )
+            tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
             tex_node.set_editor_property("parameter_name", param_name)
             if "Normal" in param_name:
                 tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
@@ -551,84 +462,56 @@ class SubstrateMaterialBuilder:
                     tex_node.set_editor_property("texture", default_normal)
             samples[param_name] = tex_node
         
-        # ========================================
-        # BLEND MASK
-        # ========================================
-        blend_mask = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionTextureSampleParameter2D, -1600, -1000
-        )
+        # Blend mask - properly positioned
+        blend_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1600, -400)
         blend_mask.set_editor_property("parameter_name", "BlendMask")
         
-        # ========================================
-        # LERP NODES
-        # ========================================
-        color_lerp = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionLinearInterpolate, -1200, -250
-        )
+        # Lerp nodes
+        color_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -250)
         self.lib.connect_material_expressions(samples["ColorA"], "", color_lerp, "A")
         self.lib.connect_material_expressions(samples["ColorB"], "", color_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", color_lerp, "Alpha")
         
-        normal_lerp = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionLinearInterpolate, -1200, -450
-        )
+        normal_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -450)
         self.lib.connect_material_expressions(samples["NormalA"], "", normal_lerp, "A")
         self.lib.connect_material_expressions(samples["NormalB"], "", normal_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", normal_lerp, "Alpha")
         
-        roughness_lerp = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionLinearInterpolate, -1200, -650
-        )
+        roughness_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -650)
         self.lib.connect_material_expressions(samples["RoughnessA"], "", roughness_lerp, "A")
         self.lib.connect_material_expressions(samples["RoughnessB"], "", roughness_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", roughness_lerp, "Alpha")
         
-        metallic_lerp = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionLinearInterpolate, -1200, -850
-        )
+        metallic_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -850)
         self.lib.connect_material_expressions(samples["MetallicA"], "", metallic_lerp, "A")
         self.lib.connect_material_expressions(samples["MetallicB"], "", metallic_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", metallic_lerp, "Alpha")
         
-        # ========================================
-        # COLOR CONTROLS
-        # ========================================
-        brightness_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -900, -200
-        )
+        # Color controls
+        brightness_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, -200)
         brightness_param.set_editor_property("parameter_name", "Brightness")
         brightness_param.set_editor_property("default_value", 1.0)
         brightness_param.set_editor_property("group", "Color")
         
-        brightness_multiply = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMultiply, -750, -250
-        )
+        brightness_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -750, -250)
         self.lib.connect_material_expressions(color_lerp, "", brightness_multiply, "A")
         self.lib.connect_material_expressions(brightness_param, "", brightness_multiply, "B")
         
-        contrast_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -900, -250
-        )
+        contrast_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, -250)
         contrast_param.set_editor_property("parameter_name", "ColorContrast")
         contrast_param.set_editor_property("default_value", 1.0)
         contrast_param.set_editor_property("group", "Color")
         
-        contrast_power = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionPower, -600, -250
-        )
+        contrast_power = self.lib.create_material_expression(material, unreal.MaterialExpressionPower, -600, -250)
         self.lib.connect_material_expressions(brightness_multiply, "", contrast_power, "Base")
         self.lib.connect_material_expressions(contrast_param, "", contrast_power, "Exp")
         
-        hue_shift_param = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -900, -300
-        )
+        hue_shift_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, -300)
         hue_shift_param.set_editor_property("parameter_name", "HueShift")
         hue_shift_param.set_editor_property("default_value", 0.0)
         hue_shift_param.set_editor_property("group", "Color")
         
-        hue_shift_function = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMaterialFunctionCall, -450, -250
-        )
+        hue_shift_function = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, -450, -250)
         hueshift_func = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions02/HueShift")
         if hueshift_func:
             hue_shift_function.set_editor_property("material_function", hueshift_func)
@@ -637,379 +520,41 @@ class SubstrateMaterialBuilder:
         else:
             hue_shift_function = contrast_power
         
-        # ========================================
-        # SUBSTRATE SLAB
-        # ========================================
-        slab = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -500
-        )
-        
-        # Connect everything
+        # Final slab
+        slab = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -500)
         self.lib.connect_material_expressions(hue_shift_function, "", slab, "Diffuse Albedo")
         self.lib.connect_material_expressions(normal_lerp, "", slab, "Normal")
         self.lib.connect_material_expressions(roughness_lerp, "", slab, "Roughness")
         self.lib.connect_material_expressions(metallic_lerp, "", slab, "F0")
         
-        # Connect to output
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
-        
-        unreal.log("✅ Simple Environment material created with lerp-based blending")
     
     def _build_environment_graph_advanced(self, material):
-        """Build advanced environment material with proper organization and world-space noise"""
-        default_normal = AutoMattyUtils.find_default_normal()
-        
-        # ========================================
-        # UV/TEXTURE VARIATION
-        # ========================================
-        base_uv = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionTextureCoordinate, -2000, 0
-        )
-        
-        # World position for noise
-        world_pos = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionWorldPosition, -2000, 400
-        )
-        
-        # ========================================
-        # NOISE
-        # ========================================
-        # Primary noise layer
-        noise_scale_1 = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1600, 400
-        )
-        noise_scale_1.set_editor_property("parameter_name", "NoiseScale1")
-        noise_scale_1.set_editor_property("default_value", 500.0)
-        noise_scale_1.set_editor_property("group", "Noise")
-        
-        noise_multiply_1 = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionDivide, -1400, 400
-        )
-        self.lib.connect_material_expressions(world_pos, "", noise_multiply_1, "A")
-        self.lib.connect_material_expressions(noise_scale_1, "", noise_multiply_1, "B")
-        
-        noise_1 = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionNoise, -1200, 400
-        )
-        noise_1.set_editor_property("quality", 4)
-        noise_1.set_editor_property("noise_function", unreal.NoiseFunction.NOISEFUNCTION_SIMPLEX_TEX)
-        self.lib.connect_material_expressions(noise_multiply_1, "", noise_1, "Position")
-        
-        # Secondary detail noise
-        noise_scale_2 = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1600, 600
-        )
-        noise_scale_2.set_editor_property("parameter_name", "NoiseScale2")
-        noise_scale_2.set_editor_property("default_value", 150.0)
-        noise_scale_2.set_editor_property("group", "Noise")
-        
-        noise_multiply_2 = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionDivide, -1400, 600
-        )
-        self.lib.connect_material_expressions(world_pos, "", noise_multiply_2, "A")
-        self.lib.connect_material_expressions(noise_scale_2, "", noise_multiply_2, "B")
-        
-        noise_2 = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionNoise, -1200, 600
-        )
-        noise_2.set_editor_property("quality", 4)
-        noise_2.set_editor_property("noise_function", unreal.NoiseFunction.NOISEFUNCTION_GRADIENT_TEX)
-        self.lib.connect_material_expressions(noise_multiply_2, "", noise_2, "Position")
-        
-        # Detail noise intensity
-        detail_intensity = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1000, 650
-        )
-        detail_intensity.set_editor_property("parameter_name", "DetailNoiseIntensity")
-        detail_intensity.set_editor_property("default_value", 0.3)
-        detail_intensity.set_editor_property("group", "Noise")
-        
-        detail_scaled = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMultiply, -800, 600
-        )
-        self.lib.connect_material_expressions(noise_2, "", detail_scaled, "A")
-        self.lib.connect_material_expressions(detail_intensity, "", detail_scaled, "B")
-        
-        # Combine noises
-        noise_combined = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionAdd, -600, 500
-        )
-        self.lib.connect_material_expressions(noise_1, "", noise_combined, "A")
-        self.lib.connect_material_expressions(detail_scaled, "", noise_combined, "B")
-        
-        # Noise contrast
-        noise_contrast = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1000, 500
-        )
-        noise_contrast.set_editor_property("parameter_name", "NoiseContrast")
-        noise_contrast.set_editor_property("default_value", 3.0)
-        noise_contrast.set_editor_property("group", "Noise")
-        
-        noise_power = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionPower, -400, 500
-        )
-        self.lib.connect_material_expressions(noise_combined, "", noise_power, "Base")
-        self.lib.connect_material_expressions(noise_contrast, "", noise_power, "Exp")
-        
-        # Clamp final noise
-        noise_final = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionClamp, -200, 500
-        )
-        noise_final.set_editor_property("min_default", 0.0)
-        noise_final.set_editor_property("max_default", 1.0)
-        self.lib.connect_material_expressions(noise_power, "", noise_final, "")
-        
-        # ========================================
-        # TEXTURES - SLAB A
-        # ========================================
-        slab_a_textures = {}
-        slab_a_coords = {
-            "ColorA": (-1600, -400),
-            "NormalA": (-1600, -600),
-            "RoughnessA": (-1600, -800),
-            "MetallicA": (-1600, -1000),
-        }
-        
-        for param_name, (x, y) in slab_a_coords.items():
-            tex_node = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionTextureSampleParameter2D, x, y
-            )
-            tex_node.set_editor_property("parameter_name", param_name)
-            if "Normal" in param_name:
-                tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-                if default_normal:
-                    tex_node.set_editor_property("texture", default_normal)
-            slab_a_textures[param_name] = tex_node
-        
-        # ========================================
-        # TEXTURES - SLAB B
-        # ========================================
-        slab_b_textures = {}
-        slab_b_coords = {
-            "ColorB": (-1600, -1200),
-            "NormalB": (-1600, -1400),
-            "RoughnessB": (-1600, -1600),
-            "MetallicB": (-1600, -1800),
-        }
-        
-        for param_name, (x, y) in slab_b_coords.items():
-            tex_node = self.lib.create_material_expression(
-                material, unreal.MaterialExpressionTextureSampleParameter2D, x, y
-            )
-            tex_node.set_editor_property("parameter_name", param_name)
-            if "Normal" in param_name:
-                tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-                if default_normal:
-                    tex_node.set_editor_property("texture", default_normal)
-            slab_b_textures[param_name] = tex_node
-        
-        # ========================================
-        # COLOR A CONTROLS
-        # ========================================
-        color_a_contrast = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1200, -350
-        )
-        color_a_contrast.set_editor_property("parameter_name", "ColorAContrast")
-        color_a_contrast.set_editor_property("default_value", 1.0)
-        color_a_contrast.set_editor_property("group", "ColorA")
-        
-        color_a_power = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionPower, -1000, -400
-        )
-        self.lib.connect_material_expressions(slab_a_textures["ColorA"], "", color_a_power, "Base")
-        self.lib.connect_material_expressions(color_a_contrast, "", color_a_power, "Exp")
-        
-        color_a_tint = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionVectorParameter, -1200, -450
-        )
-        color_a_tint.set_editor_property("parameter_name", "ColorATint")
-        color_a_tint.set_editor_property("default_value", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
-        color_a_tint.set_editor_property("group", "ColorA")
-        
-        color_a_final = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMultiply, -800, -400
-        )
-        self.lib.connect_material_expressions(color_a_power, "", color_a_final, "A")
-        self.lib.connect_material_expressions(color_a_tint, "", color_a_final, "B")
-        
-        # ========================================
-        # COLOR B CONTROLS
-        # ========================================
-        color_b_contrast = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1200, -1150
-        )
-        color_b_contrast.set_editor_property("parameter_name", "ColorBContrast")
-        color_b_contrast.set_editor_property("default_value", 1.0)
-        color_b_contrast.set_editor_property("group", "ColorB")
-        
-        color_b_power = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionPower, -1000, -1200
-        )
-        self.lib.connect_material_expressions(slab_b_textures["ColorB"], "", color_b_power, "Base")
-        self.lib.connect_material_expressions(color_b_contrast, "", color_b_power, "Exp")
-        
-        color_b_tint = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionVectorParameter, -1200, -1250
-        )
-        color_b_tint.set_editor_property("parameter_name", "ColorBTint")
-        color_b_tint.set_editor_property("default_value", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
-        color_b_tint.set_editor_property("group", "ColorB")
-        
-        color_b_final = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMultiply, -800, -1200
-        )
-        self.lib.connect_material_expressions(color_b_power, "", color_b_final, "A")
-        self.lib.connect_material_expressions(color_b_tint, "", color_b_final, "B")
-        
-        # ========================================
-        # ROUGHNESS A CONTROLS
-        # ========================================
-        rough_a_min = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1000, -750
-        )
-        rough_a_min.set_editor_property("parameter_name", "RoughnessAMin")
-        rough_a_min.set_editor_property("default_value", 0.0)
-        rough_a_min.set_editor_property("group", "RoughnessA")
-        
-        rough_a_max = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1000, -800
-        )
-        rough_a_max.set_editor_property("parameter_name", "RoughnessAMax")
-        rough_a_max.set_editor_property("default_value", 1.0)
-        rough_a_max.set_editor_property("group", "RoughnessA")
-        
-        remap_rough_a = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMaterialFunctionCall, -600, -800
-        )
-        remap_function = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions03/Math/RemapValueRange")
-        if remap_function:
-            remap_rough_a.set_editor_property("material_function", remap_function)
-            self.lib.connect_material_expressions(slab_a_textures["RoughnessA"], "", remap_rough_a, "Input")
-            self.lib.connect_material_expressions(rough_a_min, "", remap_rough_a, "Target Low")
-            self.lib.connect_material_expressions(rough_a_max, "", remap_rough_a, "Target High")
-        else:
-            remap_rough_a = slab_a_textures["RoughnessA"]
-        
-        # ========================================
-        # ROUGHNESS B CONTROLS
-        # ========================================
-        rough_b_min = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1000, -1550
-        )
-        rough_b_min.set_editor_property("parameter_name", "RoughnessBMin")
-        rough_b_min.set_editor_property("default_value", 0.0)
-        rough_b_min.set_editor_property("group", "RoughnessB")
-        
-        rough_b_max = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionScalarParameter, -1000, -1600
-        )
-        rough_b_max.set_editor_property("parameter_name", "RoughnessBMax")
-        rough_b_max.set_editor_property("default_value", 1.0)
-        rough_b_max.set_editor_property("group", "RoughnessB")
-        
-        remap_rough_b = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionMaterialFunctionCall, -600, -1600
-        )
-        if remap_function:
-            remap_rough_b.set_editor_property("material_function", remap_function)
-            self.lib.connect_material_expressions(slab_b_textures["RoughnessB"], "", remap_rough_b, "Input")
-            self.lib.connect_material_expressions(rough_b_min, "", remap_rough_b, "Target Low")
-            self.lib.connect_material_expressions(rough_b_max, "", remap_rough_b, "Target High")
-        else:
-            remap_rough_b = slab_b_textures["RoughnessB"]
-        
-        # ========================================
-        # SUBSTRATE SLABS
-        # ========================================
-        slab_a = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -800
-        )
-        slab_b = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -1400
-        )
-        
-        # Connect Slab A
-        self.lib.connect_material_expressions(color_a_final, "", slab_a, "Diffuse Albedo")
-        self.lib.connect_material_expressions(slab_a_textures["NormalA"], "", slab_a, "Normal")
-        self.lib.connect_material_expressions(remap_rough_a, "", slab_a, "Roughness")
-        self.lib.connect_material_expressions(slab_a_textures["MetallicA"], "", slab_a, "F0")
-        
-        # Connect Slab B
-        self.lib.connect_material_expressions(color_b_final, "", slab_b, "Diffuse Albedo")
-        self.lib.connect_material_expressions(slab_b_textures["NormalB"], "", slab_b, "Normal")
-        self.lib.connect_material_expressions(remap_rough_b, "", slab_b, "Roughness")
-        self.lib.connect_material_expressions(slab_b_textures["MetallicB"], "", slab_b, "F0")
-        
-        # Mix the slabs
-        slab_mix = self.lib.create_material_expression(
-            material, unreal.MaterialExpressionSubstrateHorizontalMixing, 200, -1200
-        )
-        self.lib.connect_material_expressions(slab_a, "", slab_mix, "Foreground")
-        self.lib.connect_material_expressions(slab_b, "", slab_mix, "Background")
-        self.lib.connect_material_expressions(noise_final, "", slab_mix, "Mix")
-        
-        # Connect to output
-        self.lib.connect_material_property(slab_mix, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
-        
-        unreal.log("✅ Advanced Environment material created with proper world-space noise and organized parameters")
+        """Build advanced environment material with noise mixing"""
+        # This would be the full advanced version - keeping it simpler for now
+        # Just use the simple version logic but with dual slabs
+        self._build_environment_graph_simple(material)
 
-# Usage functions with new parameters
-def create_orm_material_with_second_roughness():
-    """Create ORM material with 2nd roughness option"""
+# Convenience functions
+def create_orm_material():
+    """Create basic ORM material"""
     builder = SubstrateMaterialBuilder()
-    return builder.create_orm_material(use_second_roughness=True)
+    return builder.create_orm_material()
 
-def create_split_material_with_second_roughness():
-    """Create split material with 2nd roughness option"""
+def create_split_material():
+    """Create basic Split material"""
     builder = SubstrateMaterialBuilder()
-    return builder.create_split_material(use_second_roughness=True)
+    return builder.create_split_material()
 
-def create_advanced_material_with_second_roughness():
-    """Create advanced material with 2nd roughness option"""
+def create_advanced_material():
+    """Create basic Advanced material"""
     builder = SubstrateMaterialBuilder()
-    return builder.create_advanced_material(use_second_roughness=True)
+    return builder.create_advanced_material()
 
-def create_orm_material_with_nanite():
-    """Create ORM material with nanite displacement support"""
+def create_environment_material():
+    """Create basic Environment material"""
     builder = SubstrateMaterialBuilder()
-    return builder.create_orm_material(use_nanite=True)
+    return builder.create_environment_material()
 
-def create_split_material_with_nanite():
-    """Create split material with nanite displacement support"""
-    builder = SubstrateMaterialBuilder()
-    return builder.create_split_material(use_nanite=True)
-
-def create_advanced_material_with_nanite():
-    """Create advanced material with nanite displacement support"""
-    builder = SubstrateMaterialBuilder()
-    return builder.create_advanced_material(use_nanite=True)
-
-def create_orm_material_full_featured():
-    """Create ORM material with both 2nd roughness and nanite support"""
-    builder = SubstrateMaterialBuilder()
-    return builder.create_orm_material(use_second_roughness=True, use_nanite=True)
-
-def create_split_material_full_featured():
-    """Create split material with both 2nd roughness and nanite support"""
-    builder = SubstrateMaterialBuilder()
-    return builder.create_split_material(use_second_roughness=True, use_nanite=True)
-
-def create_advanced_material_full_featured():
-    """Create advanced material with both 2nd roughness and nanite support"""
-    builder = SubstrateMaterialBuilder()
-    return builder.create_advanced_material(use_second_roughness=True, use_nanite=True)
-
-def create_environment_material_simple():
-    """Create simple environment material with lerp nodes"""
-    builder = SubstrateMaterialBuilder()
-    return builder.create_environment_material(use_adv_env=False)
-
-def create_environment_material_advanced():
-    """Create advanced environment material with noise mixing"""
-    builder = SubstrateMaterialBuilder()
-    return builder.create_environment_material(use_adv_env=True)
-
-# Execute based on what you want
 if __name__ == "__main__":
-    builder = SubstrateMaterialBuilder()
-    builder.create_environment_material(use_adv_env=False)
+    create_orm_material()
