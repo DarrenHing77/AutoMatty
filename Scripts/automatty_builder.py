@@ -699,8 +699,8 @@ class SubstrateMaterialBuilder:
         frac_node = self.lib.create_material_expression(material, unreal.MaterialExpressionFrac, -1300, -125)
         self.lib.connect_material_expressions(scale_multiply, "", frac_node, "")
         
-        # SUBSTRATE HORIZONTAL BLEND NODE - This is the key for dual slabs in UE 5.6
-        substrate_mix = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateHorizontalBlend, -1000, -550)
+        # SUBSTRATE HORIZONTAL MIXING NODE - This is the correct UE 5.6 class
+        substrate_mix = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateHorizontalMixing, -1000, -550)
         self.lib.connect_material_expressions(slab_a, "", substrate_mix, "Background")
         self.lib.connect_material_expressions(slab_b, "", substrate_mix, "Foreground")
         self.lib.connect_material_expressions(frac_node, "", substrate_mix, "Mix")
