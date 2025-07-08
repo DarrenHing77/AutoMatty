@@ -1,6 +1,6 @@
 """
-AutoMatty Material Builder - Complete Final Version
-All fixes included: Triplanar, HueShift connections, Environment spacing, Emission fix
+AutoMatty Material Builder - Final Fixed Version
+Combined fixes: XYZ Texture output + correct input pins + function names + no comment blocks
 """
 import unreal
 
@@ -15,7 +15,7 @@ except ImportError as e:
     raise
 
 class SubstrateMaterialBuilder:
-    """Complete Substrate material builder with all features"""
+    """Complete Substrate material builder with all fixes"""
     
     def __init__(self, custom_paths=None):
         self.config = AutoMattyConfig()
@@ -127,8 +127,8 @@ class SubstrateMaterialBuilder:
         unreal.log(f"✅ Advanced material '{name}'{feature_text} created")
         return material
     
-    def create_environment_material(self, base_name=None, custom_path=None, use_adv_env=False):
-        """Create Environment material (simple or advanced)"""
+    def create_environment_material(self, base_name=None, custom_path=None, use_adv_env=False, use_triplanar=False):
+        """Create Environment material (simple or advanced) with triplanar support"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
@@ -144,41 +144,24 @@ class SubstrateMaterialBuilder:
         material = self.atools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
         
         if use_adv_env:
-            self._build_environment_graph_advanced(material)
+            self._build_environment_graph_advanced(material, use_triplanar=use_triplanar)
         else:
-            self._build_environment_graph_simple(material)
+            self._build_environment_graph_simple(material, use_triplanar=use_triplanar)
         
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
         
-        env_type = "Advanced" if use_adv_env else "Simple"
-        unreal.log(f"✅ {env_type} Environment material '{name}' created")
+        features = []
+        if use_triplanar: features.append("triplanar")
+        if use_adv_env: features.append("advanced-mixing")
+        feature_text = f" ({', '.join(features)})" if features else ""
+        
+        unreal.log(f"✅ Environment material '{name}'{feature_text} created")
         return material
     
-    def _create_comment_block(self, material, text, x, y, color=None):
-        """Create visual comment block"""
-        if color is None:
-            color = unreal.LinearColor(0.2, 0.8, 0.2, 0.8)
-        
-        comment = self.lib.create_material_expression(material, unreal.MaterialExpressionComment, x, y)
-        comment.set_editor_property("text", text)
-        comment.set_editor_property("comment_color", color)
-        comment.set_editor_property("font_size", 14)
-        return comment
-    
     def _build_standard_graph(self, material, material_type="orm", use_second_roughness=False, use_nanite=False, use_triplanar=False):
-        """Build standard material graph with all features"""
+        """Build standard material graph with all fixes applied"""
         default_normal = AutoMattyUtils.find_default_normal()
-        
-        # Comment blocks
-        self._create_comment_block(material, "TEXTURES", -1500, -100, unreal.LinearColor(0.3, 0.7, 1.0, 0.8))
-        self._create_comment_block(material, "COLOR CONTROLS", -1200, -100, unreal.LinearColor(1.0, 0.8, 0.3, 0.8))
-        self._create_comment_block(material, "SUBSTRATE SLAB", -300, -300, unreal.LinearColor(0.2, 0.8, 0.2, 0.8))
-        
-        if use_triplanar:
-            self._create_comment_block(material, "TRIPLANAR MAPPING", -1500, -950, unreal.LinearColor(0.2, 1.0, 1.0, 0.8))
-        if use_nanite:
-            self._create_comment_block(material, "NANITE DISPLACEMENT", -1200, -850, unreal.LinearColor(1.0, 0.2, 1.0, 0.8))
         
         # Texture coordinates
         if material_type == "orm":
@@ -200,43 +183,59 @@ class SubstrateMaterialBuilder:
         if use_nanite:
             coords["Height"] = (-1400, -800)
         
-        # Create textures
+        # Create textures - FIXED triplanar logic with corrected input pins and function names
         samples = {}
-        texture_objects = {}
         
         for pname, (x, y) in coords.items():
             if use_triplanar:
-                # Create texture object parameter for triplanar
+                # Create texture object parameter
                 texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
                 texture_param.set_editor_property("parameter_name", pname)
-                texture_objects[pname] = texture_param
                 
-                # Create triplanar function
-                triplanar_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
-                
+                # Create the appropriate world-aligned function
                 if pname == "Normal":
                     # WorldAlignedNormal for normals
-                    world_aligned_normal = unreal.EditorAssetLibrary.load_asset("/All/EngineData/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedNormal")
+                    world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                    world_aligned_normal = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedNormal")
+                    
                     if world_aligned_normal:
-                        triplanar_func.set_editor_property("material_function", world_aligned_normal)
-                        self.lib.connect_material_expressions(texture_param, "", triplanar_func, "Texture Object")
-                        samples[pname] = triplanar_func
-                        unreal.log(f"🔺 Using WorldAlignedNormal for {pname}")
+                        world_align_func.set_editor_property("material_function", world_aligned_normal)
+                        # FIXED: Connect to "TextureObject" input (no space)
+                        self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        # Store with explicit XYZ Texture output
+                        samples[pname] = (world_align_func, "XYZ Texture")
+                        unreal.log(f"🔺 Triplanar Normal setup: {pname}")
                     else:
+                        unreal.log_error(f"❌ WorldAlignedNormal function not found, falling back to regular sample")
                         samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
                 else:
-                    # WorldAlignTexture for everything else
-                    world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/All/EngineData/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignTexture")
+                    # FIXED: WorldAlignedTexture (not WorldAlignTexture)
+                    world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                    world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedTexture")
+                    
                     if world_aligned_texture:
-                        triplanar_func.set_editor_property("material_function", world_aligned_texture)
-                        self.lib.connect_material_expressions(texture_param, "", triplanar_func, "Texture Object")
-                        samples[pname] = triplanar_func
-                        unreal.log(f"🔺 Using WorldAlignTexture for {pname}")
+                        world_align_func.set_editor_property("material_function", world_aligned_texture)
+                        # FIXED: Connect to "TextureObject" input (no space)
+                        self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        # Store with explicit XYZ Texture output
+                        samples[pname] = (world_align_func, "XYZ Texture")
+                        unreal.log(f"🔺 Triplanar Texture setup: {pname}")
                     else:
+                        unreal.log_error(f"❌ WorldAlignedTexture function not found, falling back to regular sample")
                         samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
             else:
-                # Regular texture samples
+                # Regular texture samples (non-triplanar)
                 samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
+        
+        # Helper function to connect samples (handles both regular and triplanar)
+        def connect_sample(sample, target_node, target_input):
+            if isinstance(sample, tuple):
+                # Triplanar: (node, output_pin)
+                source_node, output_pin = sample
+                self.lib.connect_material_expressions(source_node, output_pin, target_node, target_input)
+            else:
+                # Regular texture sample
+                self.lib.connect_material_expressions(sample, "", target_node, target_input)
         
         # Color controls
         brightness_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -100)
@@ -245,7 +244,7 @@ class SubstrateMaterialBuilder:
         brightness_param.set_editor_property("group", "Color")
         
         brightness_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -900, -150)
-        self.lib.connect_material_expressions(samples["Color"], "", brightness_multiply, "A")
+        connect_sample(samples["Color"], brightness_multiply, "A")
         self.lib.connect_material_expressions(brightness_param, "", brightness_multiply, "B")
         
         color_contrast_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -150)
@@ -278,7 +277,7 @@ class SubstrateMaterialBuilder:
             rough_mask.set_editor_property("g", True)
             rough_mask.set_editor_property("b", False)
             rough_mask.set_editor_property("a", False)
-            self.lib.connect_material_expressions(samples["ORM"], "", rough_mask, "")
+            connect_sample(samples["ORM"], rough_mask, "")
             roughness_input = rough_mask
         else:
             roughness_input = samples["Roughness"]
@@ -297,7 +296,13 @@ class SubstrateMaterialBuilder:
         remap_function = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions03/Math/RemapValueRange")
         if remap_function:
             remap_roughness.set_editor_property("material_function", remap_function)
-            self.lib.connect_material_expressions(roughness_input, "", remap_roughness, "Input")
+            if isinstance(roughness_input, tuple):
+                # Handle triplanar roughness input
+                source_node, output_pin = roughness_input
+                self.lib.connect_material_expressions(source_node, output_pin, remap_roughness, "Input")
+            else:
+                # Handle regular roughness input (either component mask or direct sample)
+                self.lib.connect_material_expressions(roughness_input, "", remap_roughness, "Input")
             self.lib.connect_material_expressions(rough_min_param, "", remap_roughness, "Target Low")
             self.lib.connect_material_expressions(rough_max_param, "", remap_roughness, "Target High")
         else:
@@ -310,7 +315,7 @@ class SubstrateMaterialBuilder:
             metal_mask.set_editor_property("g", False)
             metal_mask.set_editor_property("b", True)
             metal_mask.set_editor_property("a", False)
-            self.lib.connect_material_expressions(samples["ORM"], "", metal_mask, "")
+            connect_sample(samples["ORM"], metal_mask, "")
             metallic_input = metal_mask
         else:
             metallic_input = samples["Metallic"]
@@ -321,7 +326,13 @@ class SubstrateMaterialBuilder:
         metal_intensity.set_editor_property("group", "Metallic")
         
         metal_final = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -700, -550)
-        self.lib.connect_material_expressions(metallic_input, "", metal_final, "A")
+        if isinstance(metallic_input, tuple):
+            # Handle triplanar metallic input
+            source_node, output_pin = metallic_input
+            self.lib.connect_material_expressions(source_node, output_pin, metal_final, "A")
+        else:
+            # Handle regular metallic input (either component mask or direct sample)
+            self.lib.connect_material_expressions(metallic_input, "", metal_final, "A")
         self.lib.connect_material_expressions(metal_intensity, "", metal_final, "B")
         
         # AO controls (ORM only)
@@ -332,7 +343,7 @@ class SubstrateMaterialBuilder:
             ao_mask.set_editor_property("g", False)
             ao_mask.set_editor_property("b", False)
             ao_mask.set_editor_property("a", False)
-            self.lib.connect_material_expressions(samples["ORM"], "", ao_mask, "")
+            connect_sample(samples["ORM"], ao_mask, "")
             ao_final = ao_mask
         
         # Emission controls
@@ -342,7 +353,7 @@ class SubstrateMaterialBuilder:
         emission_intensity.set_editor_property("group", "Emission")
         
         emission_final = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -700, -650)
-        self.lib.connect_material_expressions(samples["Emission"], "", emission_final, "A")
+        connect_sample(samples["Emission"], emission_final, "A")
         self.lib.connect_material_expressions(emission_intensity, "", emission_final, "B")
         
         # SSS controls
@@ -378,7 +389,7 @@ class SubstrateMaterialBuilder:
             zero_constant.set_editor_property("r", 0.0)
             
             displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -900, -850)
-            self.lib.connect_material_expressions(samples["Height"], "", displacement_multiply, "A")
+            connect_sample(samples["Height"], displacement_multiply, "A")
             self.lib.connect_material_expressions(displacement_intensity, "", displacement_multiply, "B")
             
             self.lib.connect_material_expressions(zero_constant, "", height_to_vector, "A")
@@ -404,11 +415,11 @@ class SubstrateMaterialBuilder:
         # Substrate slab
         slab = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -400)
         
-        # Connect everything
+        # Connect everything to slab
         self.lib.connect_material_expressions(hue_shift_function, "", slab, "Diffuse Albedo")
         self.lib.connect_material_expressions(remap_roughness, "", slab, "Roughness")
         self.lib.connect_material_expressions(metal_final, "", slab, "F0")
-        self.lib.connect_material_expressions(samples["Normal"], "", slab, "Normal")
+        connect_sample(samples["Normal"], slab, "Normal")
         self.lib.connect_material_expressions(use_diffuse_switch, "", slab, "SSS MFP")
         self.lib.connect_material_expressions(mfp_scale, "", slab, "SSS MFP Scale")
         self.lib.connect_material_expressions(emission_final, "", slab, "Emissive Color")
@@ -436,58 +447,99 @@ class SubstrateMaterialBuilder:
                 node.set_editor_property("texture", default_normal)
         return node
     
-    def _build_environment_graph_simple(self, material):
-        """Build simple environment material with lerp blending"""
+    def _build_environment_graph_simple(self, material, use_triplanar=False):
+        """Build simple environment material with lerp blending and proper triplanar support"""
         default_normal = AutoMattyUtils.find_default_normal()
         
-        # Textures - properly spaced
+        # Helper function to connect samples (handles both regular and triplanar)
+        def connect_sample(sample, target_node, target_input):
+            if isinstance(sample, tuple):
+                source_node, output_pin = sample
+                self.lib.connect_material_expressions(source_node, output_pin, target_node, target_input)
+            else:
+                self.lib.connect_material_expressions(sample, "", target_node, target_input)
+        
         texture_coords = {
-            "ColorA": (-1600, -2000),
-            "ColorB": (-1600, -1800),
-            "NormalA": (-1600, -1600),
-            "NormalB": (-1600, -1400),
-            "RoughnessA": (-1600, -1200),
-            "RoughnessB": (-1600, -1000),
+            "ColorA": (-1600, -200),
+            "ColorB": (-1600, -300),
+            "NormalA": (-1600, -400),
+            "NormalB": (-1600, -500),
+            "RoughnessA": (-1600, -600),
+            "RoughnessB": (-1600, -700),
             "MetallicA": (-1600, -800),
-            "MetallicB": (-1600, -600),
+            "MetallicB": (-1600, -900),
         }
         
         samples = {}
         for param_name, (x, y) in texture_coords.items():
-            tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
-            tex_node.set_editor_property("parameter_name", param_name)
-            if "Normal" in param_name:
-                tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-                if default_normal:
-                    tex_node.set_editor_property("texture", default_normal)
-            samples[param_name] = tex_node
+            if use_triplanar:
+                unreal.log(f"🔺 Creating triplanar environment texture: {param_name}")
+                # Create texture object parameter
+                texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
+                texture_param.set_editor_property("parameter_name", param_name)
+                
+                if "Normal" in param_name:
+                    # WorldAlignedNormal for normals
+                    world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                    world_aligned_normal = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedNormal")
+                    
+                    if world_aligned_normal:
+                        world_align_func.set_editor_property("material_function", world_aligned_normal)
+                        self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        samples[param_name] = (world_align_func, "XYZ Texture")
+                        unreal.log(f"✅ Triplanar Normal: {param_name}")
+                    else:
+                        unreal.log_error(f"❌ WorldAlignedNormal not found for {param_name}")
+                        samples[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                else:
+                    # WorldAlignedTexture for everything else
+                    world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                    world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedTexture")
+                    
+                    if world_aligned_texture:
+                        world_align_func.set_editor_property("material_function", world_aligned_texture)
+                        self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        samples[param_name] = (world_align_func, "XYZ Texture")
+                        unreal.log(f"✅ Triplanar Texture: {param_name}")
+                    else:
+                        unreal.log_error(f"❌ WorldAlignedTexture not found for {param_name}")
+                        samples[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+            else:
+                # Regular texture samples
+                tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
+                tex_node.set_editor_property("parameter_name", param_name)
+                if "Normal" in param_name:
+                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+                    if default_normal:
+                        tex_node.set_editor_property("texture", default_normal)
+                samples[param_name] = tex_node
         
-        # Blend mask - properly positioned
-        blend_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1600, -400)
+        # Blend mask
+        blend_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1600, -100)
         blend_mask.set_editor_property("parameter_name", "BlendMask")
         
-        # Lerp nodes
+        # Simple lerps
         color_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -250)
-        self.lib.connect_material_expressions(samples["ColorA"], "", color_lerp, "A")
-        self.lib.connect_material_expressions(samples["ColorB"], "", color_lerp, "B")
+        connect_sample(samples["ColorA"], color_lerp, "A")
+        connect_sample(samples["ColorB"], color_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", color_lerp, "Alpha")
         
         normal_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -450)
-        self.lib.connect_material_expressions(samples["NormalA"], "", normal_lerp, "A")
-        self.lib.connect_material_expressions(samples["NormalB"], "", normal_lerp, "B")
+        connect_sample(samples["NormalA"], normal_lerp, "A")
+        connect_sample(samples["NormalB"], normal_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", normal_lerp, "Alpha")
         
         roughness_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -650)
-        self.lib.connect_material_expressions(samples["RoughnessA"], "", roughness_lerp, "A")
-        self.lib.connect_material_expressions(samples["RoughnessB"], "", roughness_lerp, "B")
+        connect_sample(samples["RoughnessA"], roughness_lerp, "A")
+        connect_sample(samples["RoughnessB"], roughness_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", roughness_lerp, "Alpha")
         
         metallic_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -850)
-        self.lib.connect_material_expressions(samples["MetallicA"], "", metallic_lerp, "A")
-        self.lib.connect_material_expressions(samples["MetallicB"], "", metallic_lerp, "B")
+        connect_sample(samples["MetallicA"], metallic_lerp, "A")
+        connect_sample(samples["MetallicB"], metallic_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", metallic_lerp, "Alpha")
         
-        # Color controls
+        # Color controls for simple environment
         brightness_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, -200)
         brightness_param.set_editor_property("parameter_name", "Brightness")
         brightness_param.set_editor_property("default_value", 1.0)
@@ -497,43 +549,166 @@ class SubstrateMaterialBuilder:
         self.lib.connect_material_expressions(color_lerp, "", brightness_multiply, "A")
         self.lib.connect_material_expressions(brightness_param, "", brightness_multiply, "B")
         
-        contrast_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, -250)
-        contrast_param.set_editor_property("parameter_name", "ColorContrast")
-        contrast_param.set_editor_property("default_value", 1.0)
-        contrast_param.set_editor_property("group", "Color")
-        
-        contrast_power = self.lib.create_material_expression(material, unreal.MaterialExpressionPower, -600, -250)
-        self.lib.connect_material_expressions(brightness_multiply, "", contrast_power, "Base")
-        self.lib.connect_material_expressions(contrast_param, "", contrast_power, "Exp")
-        
-        hue_shift_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, -300)
-        hue_shift_param.set_editor_property("parameter_name", "HueShift")
-        hue_shift_param.set_editor_property("default_value", 0.0)
-        hue_shift_param.set_editor_property("group", "Color")
-        
-        hue_shift_function = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, -450, -250)
-        hueshift_func = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions02/HueShift")
-        if hueshift_func:
-            hue_shift_function.set_editor_property("material_function", hueshift_func)
-            self.lib.connect_material_expressions(contrast_power, "", hue_shift_function, "Texture")
-            self.lib.connect_material_expressions(hue_shift_param, "", hue_shift_function, "Hue Shift Percentage")
-        else:
-            hue_shift_function = contrast_power
-        
-        # Final slab
-        slab = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -500)
-        self.lib.connect_material_expressions(hue_shift_function, "", slab, "Diffuse Albedo")
+        # Final single slab for simple environment
+        slab = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -600, -500)
+        self.lib.connect_material_expressions(brightness_multiply, "", slab, "Diffuse Albedo")
         self.lib.connect_material_expressions(normal_lerp, "", slab, "Normal")
         self.lib.connect_material_expressions(roughness_lerp, "", slab, "Roughness")
         self.lib.connect_material_expressions(metallic_lerp, "", slab, "F0")
         
+        # Connect to material output
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
+        
+        unreal.log("✅ Simple environment material with texture blending created!")
     
-    def _build_environment_graph_advanced(self, material):
-        """Build advanced environment material with noise mixing"""
-        # This would be the full advanced version - keeping it simpler for now
-        # Just use the simple version logic but with dual slabs
-        self._build_environment_graph_simple(material)
+    def _build_environment_graph_advanced(self, material, use_triplanar=False):
+        """Build advanced environment material with dual slabs and simple world-space mixing"""
+        default_normal = AutoMattyUtils.find_default_normal()
+        
+        unreal.log("🎛️ Building advanced dual-slab environment material...")
+        
+        # Helper function to connect samples (handles both regular and triplanar)
+        def connect_sample(sample, target_node, target_input):
+            if isinstance(sample, tuple):
+                source_node, output_pin = sample
+                self.lib.connect_material_expressions(source_node, output_pin, target_node, target_input)
+            else:
+                self.lib.connect_material_expressions(sample, "", target_node, target_input)
+        
+        # Material A textures
+        texture_coords_a = {
+            "ColorA": (-1800, -200),
+            "NormalA": (-1800, -300),
+            "RoughnessA": (-1800, -400),
+            "MetallicA": (-1800, -500),
+        }
+        
+        # Material B textures
+        texture_coords_b = {
+            "ColorB": (-1800, -700),
+            "NormalB": (-1800, -800),
+            "RoughnessB": (-1800, -900),
+            "MetallicB": (-1800, -1000),
+        }
+        
+        samples_a = {}
+        samples_b = {}
+        
+        # Create Material A textures
+        for param_name, (x, y) in texture_coords_a.items():
+            if use_triplanar:
+                texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
+                texture_param.set_editor_property("parameter_name", param_name)
+                
+                if "Normal" in param_name:
+                    world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                    world_aligned_normal = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedNormal")
+                    if world_aligned_normal:
+                        world_align_func.set_editor_property("material_function", world_aligned_normal)
+                        self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        samples_a[param_name] = (world_align_func, "XYZ Texture")
+                    else:
+                        samples_a[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                else:
+                    world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                    world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedTexture")
+                    if world_aligned_texture:
+                        world_align_func.set_editor_property("material_function", world_aligned_texture)
+                        self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        samples_a[param_name] = (world_align_func, "XYZ Texture")
+                    else:
+                        samples_a[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+            else:
+                tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
+                tex_node.set_editor_property("parameter_name", param_name)
+                if "Normal" in param_name:
+                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+                    if default_normal:
+                        tex_node.set_editor_property("texture", default_normal)
+                samples_a[param_name] = tex_node
+        
+        # Create Material B textures
+        for param_name, (x, y) in texture_coords_b.items():
+            if use_triplanar:
+                texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
+                texture_param.set_editor_property("parameter_name", param_name)
+                
+                if "Normal" in param_name:
+                    world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                    world_aligned_normal = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedNormal")
+                    if world_aligned_normal:
+                        world_align_func.set_editor_property("material_function", world_aligned_normal)
+                        self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        samples_b[param_name] = (world_align_func, "XYZ Texture")
+                    else:
+                        samples_b[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                else:
+                    world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
+                    world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedTexture")
+                    if world_aligned_texture:
+                        world_align_func.set_editor_property("material_function", world_aligned_texture)
+                        self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        samples_b[param_name] = (world_align_func, "XYZ Texture")
+                    else:
+                        samples_b[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+            else:
+                tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
+                tex_node.set_editor_property("parameter_name", param_name)
+                if "Normal" in param_name:
+                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+                    if default_normal:
+                        tex_node.set_editor_property("texture", default_normal)
+                samples_b[param_name] = tex_node
+        
+        # Create SLAB A
+        slab_a = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -1400, -350)
+        connect_sample(samples_a["ColorA"], slab_a, "Diffuse Albedo")
+        connect_sample(samples_a["NormalA"], slab_a, "Normal")
+        connect_sample(samples_a["RoughnessA"], slab_a, "Roughness")
+        connect_sample(samples_a["MetallicA"], slab_a, "F0")
+        
+        # Create SLAB B
+        slab_b = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -1400, -750)
+        connect_sample(samples_b["ColorB"], slab_b, "Diffuse Albedo")
+        connect_sample(samples_b["NormalB"], slab_b, "Normal")
+        connect_sample(samples_b["RoughnessB"], slab_b, "Roughness")
+        connect_sample(samples_b["MetallicB"], slab_b, "F0")
+        
+        # Simple world-space mixing (like your previous versions)
+        world_pos = self.lib.create_material_expression(material, unreal.MaterialExpressionWorldPosition, -1600, -100)
+        
+        # Break out just the Z component for height-based mixing
+        component_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionComponentMask, -1500, -100)
+        component_mask.set_editor_property("r", False)
+        component_mask.set_editor_property("g", False)
+        component_mask.set_editor_property("b", True)  # Z component
+        component_mask.set_editor_property("a", False)
+        self.lib.connect_material_expressions(world_pos, "", component_mask, "")
+        
+        # Scale the world position
+        scale_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1600, -150)
+        scale_param.set_editor_property("parameter_name", "MixScale")
+        scale_param.set_editor_property("default_value", 0.001)
+        scale_param.set_editor_property("group", "Advanced Mixing")
+        
+        scale_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1400, -125)
+        self.lib.connect_material_expressions(component_mask, "", scale_multiply, "A")
+        self.lib.connect_material_expressions(scale_param, "", scale_multiply, "B")
+        
+        # Frac to create tiling pattern
+        frac_node = self.lib.create_material_expression(material, unreal.MaterialExpressionFrac, -1300, -125)
+        self.lib.connect_material_expressions(scale_multiply, "", frac_node, "")
+        
+        # SUBSTRATE HORIZONTAL BLEND NODE - This is the key for dual slabs in UE 5.6
+        substrate_mix = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateHorizontalBlend, -1000, -550)
+        self.lib.connect_material_expressions(slab_a, "", substrate_mix, "Background")
+        self.lib.connect_material_expressions(slab_b, "", substrate_mix, "Foreground")
+        self.lib.connect_material_expressions(frac_node, "", substrate_mix, "Mix")
+        
+        # Connect to material output
+        self.lib.connect_material_property(substrate_mix, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
+        
+        unreal.log("✅ Advanced dual-slab environment with world-space mixing created!")
 
 # Convenience functions
 def create_orm_material():
