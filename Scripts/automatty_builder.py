@@ -1,6 +1,5 @@
 """
-AutoMatty Material Builder - Final Fixed Version
-Combined fixes: XYZ Texture output + correct input pins + function names + no comment blocks
+AutoMatty Material Builder - Fixed Version with Proper Height Parameter Handling
 """
 import unreal
 
@@ -127,8 +126,8 @@ class SubstrateMaterialBuilder:
         unreal.log(f"✅ Advanced material '{name}'{feature_text} created")
         return material
     
-    def create_environment_material(self, base_name=None, custom_path=None, use_adv_env=False, use_triplanar=False):
-        """Create Environment material (simple or advanced) with triplanar support"""
+    def create_environment_material(self, base_name=None, custom_path=None, use_adv_env=False, use_triplanar=False, use_nanite=False):
+        """Create Environment material (simple or advanced) with triplanar and nanite support"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
@@ -143,10 +142,15 @@ class SubstrateMaterialBuilder:
         
         material = self.atools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
         
+        # Enable tessellation for nanite
+        if use_nanite:
+            material.set_editor_property("enable_tessellation", True)
+            unreal.log(f"🏔️ Enabled tessellation for nanite displacement")
+        
         if use_adv_env:
-            self._build_environment_graph_advanced(material, use_triplanar=use_triplanar)
+            self._build_environment_graph_advanced(material, use_triplanar=use_triplanar, use_nanite=use_nanite)
         else:
-            self._build_environment_graph_simple(material, use_triplanar=use_triplanar)
+            self._build_environment_graph_simple(material, use_triplanar=use_triplanar, use_nanite=use_nanite)
         
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
@@ -154,6 +158,7 @@ class SubstrateMaterialBuilder:
         features = []
         if use_triplanar: features.append("triplanar")
         if use_adv_env: features.append("advanced-mixing")
+        if use_nanite: features.append("nanite")
         feature_text = f" ({', '.join(features)})" if features else ""
         
         unreal.log(f"✅ Environment material '{name}'{feature_text} created")
@@ -182,15 +187,28 @@ class SubstrateMaterialBuilder:
         
         if use_nanite:
             coords["Height"] = (-1400, -800)
+            unreal.log(f"🏔️ Adding Height parameter for nanite displacement")
         
         # Create textures - FIXED triplanar logic with corrected input pins and function names
         samples = {}
         
         for pname, (x, y) in coords.items():
             if use_triplanar:
-                # Create texture object parameter
+                # Create texture object parameter with proper grouping
                 texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
                 texture_param.set_editor_property("parameter_name", pname)
+                
+                # Set parameter groups for better organization
+                if pname == "Height":
+                    texture_param.set_editor_property("group", "Displacement")
+                elif pname in ["Color", "ORM"]:
+                    texture_param.set_editor_property("group", "Color")
+                elif pname in ["Roughness", "Metallic"]:
+                    texture_param.set_editor_property("group", pname)
+                elif pname == "Normal":
+                    texture_param.set_editor_property("group", "Normal")
+                elif pname == "Emission":
+                    texture_param.set_editor_property("group", "Emission")
                 
                 # Create the appropriate world-aligned function
                 if pname == "Normal":
@@ -219,7 +237,10 @@ class SubstrateMaterialBuilder:
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
                         # Store with explicit XYZ Texture output
                         samples[pname] = (world_align_func, "XYZ Texture")
-                        unreal.log(f"🔺 Triplanar Texture setup: {pname}")
+                        if pname == "Height":
+                            unreal.log(f"🏔️ Triplanar Height setup: {pname}")
+                        else:
+                            unreal.log(f"🔺 Triplanar Texture setup: {pname}")
                     else:
                         unreal.log_error(f"❌ WorldAlignedTexture function not found, falling back to regular sample")
                         samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
@@ -375,27 +396,20 @@ class SubstrateMaterialBuilder:
         self.lib.connect_material_expressions(hue_shift_function, "", use_diffuse_switch, "True")
         self.lib.connect_material_expressions(mfp_color_param, "", use_diffuse_switch, "False")
         
-        # Nanite displacement
+        # Nanite displacement - FIXED
         displacement_final = None
-        if use_nanite:
+        if use_nanite and "Height" in samples:
             displacement_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -850)
             displacement_intensity.set_editor_property("parameter_name", "DisplacementIntensity")
-            displacement_intensity.set_editor_property("default_value", 1.0)
+            displacement_intensity.set_editor_property("default_value", 0.1)  # Better default
             displacement_intensity.set_editor_property("group", "Displacement")
             
-            height_to_vector = self.lib.create_material_expression(material, unreal.MaterialExpressionAppendVector, -800, -800)
-            
-            zero_constant = self.lib.create_material_expression(material, unreal.MaterialExpressionConstant, -900, -750)
-            zero_constant.set_editor_property("r", 0.0)
-            
-            displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -900, -850)
+            displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -700, -800)
             connect_sample(samples["Height"], displacement_multiply, "A")
             self.lib.connect_material_expressions(displacement_intensity, "", displacement_multiply, "B")
             
-            self.lib.connect_material_expressions(zero_constant, "", height_to_vector, "A")
-            self.lib.connect_material_expressions(displacement_multiply, "", height_to_vector, "B")
-            
-            displacement_final = height_to_vector
+            displacement_final = displacement_multiply
+            unreal.log(f"🏔️ Nanite displacement setup complete")
         
         # Second roughness
         second_roughness_params = {}
@@ -434,20 +448,51 @@ class SubstrateMaterialBuilder:
         # Connect to outputs
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
         
+        # FIXED: Use proper displacement output for Nanite  
         if use_nanite and displacement_final:
-            self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+            # Try different displacement property names for UE 5.6
+            try:
+                self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_DISPLACEMENT)
+                unreal.log(f"🏔️ Connected displacement to MP_DISPLACEMENT")
+            except AttributeError:
+                try:
+                    # Alternative property name in some UE versions
+                    self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_TESSELLATION_MULTIPLIER)
+                    unreal.log(f"🏔️ Connected displacement to MP_TESSELLATION_MULTIPLIER")
+                except AttributeError:
+                    # Check what properties actually exist
+                    available_props = [prop for prop in dir(unreal.MaterialProperty) if prop.startswith('MP_')]
+                    displacement_props = [prop for prop in available_props if 'DISPLACE' in prop.upper() or 'TESS' in prop.upper()]
+                    unreal.log_error(f"❌ Available displacement properties: {displacement_props}")
+                    # Fallback to world position offset
+                    self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+                    unreal.log_warning(f"⚠️ Using MP_WORLD_POSITION_OFFSET as fallback")
     
     def _create_regular_texture_sample(self, material, param_name, x, y, default_normal=None):
-        """Create regular texture sample"""
+        """Create regular texture sample with proper parameter grouping"""
         node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
         node.set_editor_property("parameter_name", param_name)
-        if param_name == "Normal":
+        
+        # Set parameter groups for better organization
+        if param_name == "Height":
+            node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
+            node.set_editor_property("group", "Displacement")
+            unreal.log(f"🏔️ Regular Height texture sample created with Displacement group")
+        elif param_name == "Normal":
             node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+            node.set_editor_property("group", "Normal")
             if default_normal:
                 node.set_editor_property("texture", default_normal)
+        elif param_name in ["Color", "ORM"]:
+            node.set_editor_property("group", "Color")
+        elif param_name in ["Roughness", "Metallic"]:
+            node.set_editor_property("group", param_name)
+        elif param_name == "Emission":
+            node.set_editor_property("group", "Emission")
+        
         return node
     
-    def _build_environment_graph_simple(self, material, use_triplanar=False):
+    def _build_environment_graph_simple(self, material, use_triplanar=False, use_nanite=False):
         """Build simple environment material with lerp blending and proper triplanar support"""
         default_normal = AutoMattyUtils.find_default_normal()
         
@@ -470,13 +515,31 @@ class SubstrateMaterialBuilder:
             "MetallicB": (-1600, -900),
         }
         
+        # Add height maps for nanite displacement
+        if use_nanite:
+            texture_coords["HeightA"] = (-1600, -1000)
+            texture_coords["HeightB"] = (-1600, -1100)
+            unreal.log(f"🏔️ Adding Height parameters for environment nanite displacement")
+        
         samples = {}
         for param_name, (x, y) in texture_coords.items():
             if use_triplanar:
                 unreal.log(f"🔺 Creating triplanar environment texture: {param_name}")
-                # Create texture object parameter
+                # Create texture object parameter with proper grouping
                 texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
                 texture_param.set_editor_property("parameter_name", param_name)
+                
+                # Set parameter groups
+                if "Color" in param_name:
+                    texture_param.set_editor_property("group", "Color")
+                elif "Normal" in param_name:
+                    texture_param.set_editor_property("group", "Normal")
+                elif "Roughness" in param_name:
+                    texture_param.set_editor_property("group", "Roughness")
+                elif "Metallic" in param_name:
+                    texture_param.set_editor_property("group", "Metallic")
+                elif "Height" in param_name:
+                    texture_param.set_editor_property("group", "Displacement")
                 
                 if "Normal" in param_name:
                     # WorldAlignedNormal for normals
@@ -508,15 +571,30 @@ class SubstrateMaterialBuilder:
                 # Regular texture samples
                 tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
                 tex_node.set_editor_property("parameter_name", param_name)
-                if "Normal" in param_name:
+                
+                # Set parameter groups
+                if "Color" in param_name:
+                    tex_node.set_editor_property("group", "Color")
+                elif "Normal" in param_name:
                     tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+                    tex_node.set_editor_property("group", "Normal")
                     if default_normal:
                         tex_node.set_editor_property("texture", default_normal)
+                elif "Roughness" in param_name:
+                    tex_node.set_editor_property("group", "Roughness")
+                elif "Metallic" in param_name:
+                    tex_node.set_editor_property("group", "Metallic")
+                elif "Height" in param_name:
+                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
+                    tex_node.set_editor_property("group", "Displacement")
+                    unreal.log(f"🏔️ Environment Height texture sample: {param_name}")
+                
                 samples[param_name] = tex_node
         
         # Blend mask
         blend_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1600, -100)
         blend_mask.set_editor_property("parameter_name", "BlendMask")
+        blend_mask.set_editor_property("group", "Environment")
         
         # Simple lerps
         color_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -250)
@@ -539,6 +617,15 @@ class SubstrateMaterialBuilder:
         connect_sample(samples["MetallicB"], metallic_lerp, "B")
         self.lib.connect_material_expressions(blend_mask, "", metallic_lerp, "Alpha")
         
+        # Height lerp for displacement (if nanite enabled)
+        height_lerp = None
+        if use_nanite and "HeightA" in samples and "HeightB" in samples:
+            height_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -1050)
+            connect_sample(samples["HeightA"], height_lerp, "A")
+            connect_sample(samples["HeightB"], height_lerp, "B")
+            self.lib.connect_material_expressions(blend_mask, "", height_lerp, "Alpha")
+            unreal.log(f"🏔️ Environment height lerp created")
+        
         # Color controls for simple environment
         brightness_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, -200)
         brightness_param.set_editor_property("parameter_name", "Brightness")
@@ -548,6 +635,21 @@ class SubstrateMaterialBuilder:
         brightness_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -750, -250)
         self.lib.connect_material_expressions(color_lerp, "", brightness_multiply, "A")
         self.lib.connect_material_expressions(brightness_param, "", brightness_multiply, "B")
+        
+        # Displacement setup for nanite
+        displacement_final = None
+        if use_nanite and height_lerp:
+            displacement_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -900, -1000)
+            displacement_intensity.set_editor_property("parameter_name", "DisplacementIntensity")
+            displacement_intensity.set_editor_property("default_value", 0.1)
+            displacement_intensity.set_editor_property("group", "Displacement")
+            
+            displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -750, -1050)
+            self.lib.connect_material_expressions(height_lerp, "", displacement_multiply, "A")
+            self.lib.connect_material_expressions(displacement_intensity, "", displacement_multiply, "B")
+            
+            displacement_final = displacement_multiply
+            unreal.log(f"🏔️ Environment displacement setup complete")
         
         # Final single slab for simple environment
         slab = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -600, -500)
@@ -559,9 +661,22 @@ class SubstrateMaterialBuilder:
         # Connect to material output
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
         
+        # Connect displacement if nanite enabled
+        if use_nanite and displacement_final:
+            try:
+                self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_DISPLACEMENT)
+                unreal.log(f"🏔️ Environment displacement connected to MP_DISPLACEMENT")
+            except AttributeError:
+                try:
+                    self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_TESSELLATION_MULTIPLIER)
+                    unreal.log(f"🏔️ Environment displacement connected to MP_TESSELLATION_MULTIPLIER")
+                except AttributeError:
+                    self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+                    unreal.log_warning(f"⚠️ Environment displacement using MP_WORLD_POSITION_OFFSET as fallback")
+        
         unreal.log("✅ Simple environment material with texture blending created!")
     
-    def _build_environment_graph_advanced(self, material, use_triplanar=False):
+    def _build_environment_graph_advanced(self, material, use_triplanar=False, use_nanite=False):
         """Build advanced environment material with dual slabs and simple world-space mixing"""
         default_normal = AutoMattyUtils.find_default_normal()
         
@@ -591,6 +706,12 @@ class SubstrateMaterialBuilder:
             "MetallicB": (-1800, -1000),
         }
         
+        # Add height maps for nanite displacement
+        if use_nanite:
+            texture_coords_a["HeightA"] = (-1800, -600)
+            texture_coords_b["HeightB"] = (-1800, -1100)
+            unreal.log(f"🏔️ Adding Height parameters for advanced environment nanite displacement")
+        
         samples_a = {}
         samples_b = {}
         
@@ -599,6 +720,7 @@ class SubstrateMaterialBuilder:
             if use_triplanar:
                 texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
                 texture_param.set_editor_property("parameter_name", param_name)
+                texture_param.set_editor_property("group", "Material A")
                 
                 if "Normal" in param_name:
                     world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
@@ -621,10 +743,14 @@ class SubstrateMaterialBuilder:
             else:
                 tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
                 tex_node.set_editor_property("parameter_name", param_name)
+                tex_node.set_editor_property("group", "Material A")
                 if "Normal" in param_name:
                     tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
                     if default_normal:
                         tex_node.set_editor_property("texture", default_normal)
+                elif "Height" in param_name:
+                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
+                    unreal.log(f"🏔️ Advanced environment Height A texture sample: {param_name}")
                 samples_a[param_name] = tex_node
         
         # Create Material B textures
@@ -632,6 +758,7 @@ class SubstrateMaterialBuilder:
             if use_triplanar:
                 texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
                 texture_param.set_editor_property("parameter_name", param_name)
+                texture_param.set_editor_property("group", "Material B")
                 
                 if "Normal" in param_name:
                     world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
@@ -654,10 +781,14 @@ class SubstrateMaterialBuilder:
             else:
                 tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
                 tex_node.set_editor_property("parameter_name", param_name)
+                tex_node.set_editor_property("group", "Material B")
                 if "Normal" in param_name:
                     tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
                     if default_normal:
                         tex_node.set_editor_property("texture", default_normal)
+                elif "Height" in param_name:
+                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
+                    unreal.log(f"🏔️ Advanced environment Height B texture sample: {param_name}")
                 samples_b[param_name] = tex_node
         
         # Create SLAB A
@@ -674,7 +805,28 @@ class SubstrateMaterialBuilder:
         connect_sample(samples_b["RoughnessB"], slab_b, "Roughness")
         connect_sample(samples_b["MetallicB"], slab_b, "F0")
         
-        # Simple world-space mixing (like your previous versions)
+        # Displacement setup for advanced environment
+        displacement_final = None
+        if use_nanite and "HeightA" in samples_a and "HeightB" in samples_b:
+            # Lerp between height A and B using the same world-space mixing pattern
+            height_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -1150)
+            connect_sample(samples_a["HeightA"], height_lerp, "A")
+            connect_sample(samples_b["HeightB"], height_lerp, "B")
+            # Connect the same frac pattern we'll create below
+            
+            displacement_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1400, -1200)
+            displacement_intensity.set_editor_property("parameter_name", "DisplacementIntensity")
+            displacement_intensity.set_editor_property("default_value", 0.1)
+            displacement_intensity.set_editor_property("group", "Displacement")
+            
+            displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1000, -1150)
+            self.lib.connect_material_expressions(height_lerp, "", displacement_multiply, "A")
+            self.lib.connect_material_expressions(displacement_intensity, "", displacement_multiply, "B")
+            
+            displacement_final = displacement_multiply
+            unreal.log(f"🏔️ Advanced environment displacement setup complete")
+        
+        # Simple world-space mixing
         world_pos = self.lib.create_material_expression(material, unreal.MaterialExpressionWorldPosition, -1600, -100)
         
         # Break out just the Z component for height-based mixing
@@ -699,7 +851,17 @@ class SubstrateMaterialBuilder:
         frac_node = self.lib.create_material_expression(material, unreal.MaterialExpressionFrac, -1300, -125)
         self.lib.connect_material_expressions(scale_multiply, "", frac_node, "")
         
-        # SUBSTRATE HORIZONTAL MIXING NODE - This is the correct UE 5.6 class
+        # Connect frac to height lerp if displacement is enabled
+        if use_nanite and displacement_final:
+            # Find the height_lerp we created earlier
+            height_lerp_nodes = [node for node in material.get_editor_property('expressions') 
+                               if isinstance(node, unreal.MaterialExpressionLinearInterpolate) 
+                               and node.get_editor_property('node_pos_y') == -1150]
+            if height_lerp_nodes:
+                self.lib.connect_material_expressions(frac_node, "", height_lerp_nodes[0], "Alpha")
+                unreal.log(f"🏔️ Connected world-space mixing to height lerp")
+        
+        # SUBSTRATE HORIZONTAL MIXING NODE
         substrate_mix = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateHorizontalMixing, -1000, -550)
         self.lib.connect_material_expressions(slab_a, "", substrate_mix, "Background")
         self.lib.connect_material_expressions(slab_b, "", substrate_mix, "Foreground")
@@ -707,6 +869,19 @@ class SubstrateMaterialBuilder:
         
         # Connect to material output
         self.lib.connect_material_property(substrate_mix, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
+        
+        # Connect displacement if nanite enabled
+        if use_nanite and displacement_final:
+            try:
+                self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_DISPLACEMENT)
+                unreal.log(f"🏔️ Advanced environment displacement connected to MP_DISPLACEMENT")
+            except AttributeError:
+                try:
+                    self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_TESSELLATION_MULTIPLIER)
+                    unreal.log(f"🏔️ Advanced environment displacement connected to MP_TESSELLATION_MULTIPLIER")
+                except AttributeError:
+                    self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+                    unreal.log_warning(f"⚠️ Advanced environment displacement using MP_WORLD_POSITION_OFFSET as fallback")
         
         unreal.log("✅ Advanced dual-slab environment with world-space mixing created!")
 
@@ -730,6 +905,12 @@ def create_environment_material():
     """Create basic Environment material"""
     builder = SubstrateMaterialBuilder()
     return builder.create_environment_material()
+
+# Fixed config button functions that pass nanite parameter
+def create_environment_material_with_nanite(use_adv_env=False, use_triplanar=False, use_nanite=False):
+    """Create Environment material with all options"""
+    builder = SubstrateMaterialBuilder()
+    return builder.create_environment_material(use_adv_env=use_adv_env, use_triplanar=use_triplanar, use_nanite=use_nanite)
 
 if __name__ == "__main__":
     create_orm_material()

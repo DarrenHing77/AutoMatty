@@ -1,6 +1,13 @@
-# AutoMatty path bootstrap - handles both engine and project plugin installs
-import unreal, os, sys
+"""
+AutoMatty Configuration and Utilities - Clean Version
+Centralized config with UI integration and button functions
+"""
+import unreal
+import os
+import sys
+import re
 
+# Setup AutoMatty path - do this first before any other imports
 def setup_automatty_path():
     """Ensure AutoMatty scripts path is available"""
     possible_paths = [
@@ -14,35 +21,21 @@ def setup_automatty_path():
         if os.path.exists(path) and os.path.isdir(path):
             if path not in sys.path:
                 sys.path.insert(0, path)
+            unreal.log(f"📁 AutoMatty scripts loaded from: {path}")
             return path
     
-    # If we get here, something's fucked
     unreal.log_error("❌ AutoMatty plugin not found in engine or project directories")
     return None
 
-# Run the setup immediately when this module loads
+# Run setup immediately
 setup_automatty_path()
 
-"""
-AutoMatty Configuration and Utilities with Height Map and Environment Support
-Centralized config with UI integration and smart naming + merged button utils
-"""
-import re
-
-# Import the universal utils first
+# Now import AutoMatty modules
 try:
     from automatty_utils import setup_automatty_imports
     setup_automatty_imports()
-except ImportError:
-    # Fallback if utils not found
-    possible_paths = [
-        os.path.join(unreal.Paths.project_dir(), "Plugins", "AutoMatty", "Scripts"),
-        os.path.join(unreal.Paths.engine_dir(), "Plugins", "AutoMatty", "Scripts")
-    ]
-    for path in possible_paths:
-        if os.path.exists(path) and path not in sys.path:
-            sys.path.insert(0, path)
-            break
+except ImportError as e:
+    unreal.log_error(f"❌ Failed to import automatty_utils: {e}")
 
 class AutoMattyConfig:
     """Centralized config for AutoMatty plugin with UI integration"""
@@ -522,28 +515,11 @@ def auto_save_texture_path():
             pass
 
 # ========================================
-# MERGED BUTTON UTILS FUNCTIONS - Material creation actions
+# BUTTON FUNCTIONS - Material creation actions
 # ========================================
 
-def setup_automatty_and_get_checkboxes():
-    """Bootstrap AutoMatty and get checkbox states"""
-    
-    # Bootstrap AutoMatty imports
-    engine_scripts_path = os.path.join(unreal.Paths.engine_dir(), "Plugins", "AutoMatty", "Scripts")
-    if engine_scripts_path not in sys.path:
-        sys.path.insert(0, engine_scripts_path)
-    
-    # Setup AutoMatty
-    try:
-        from automatty_utils import setup_automatty_imports
-        if not setup_automatty_imports():
-            unreal.log_error("❌ Failed to setup AutoMatty imports")
-            return None, {}
-    except Exception as e:
-        unreal.log_error(f"❌ AutoMatty import failed: {e}")
-        return None, {}
-    
-    # Get checkbox values from EUW
+def get_checkboxes():
+    """Get checkbox states from widget"""
     checkboxes = {
         'use_nanite': False,
         'use_second_roughness': False,
@@ -568,28 +544,21 @@ def setup_automatty_and_get_checkboxes():
     except Exception as e:
         unreal.log_error(f"⚠️ Checkbox access failed: {e}")
     
-    # Import the builder
+    return checkboxes
+
+def create_orm_material():
+    """Create ORM material"""
+    unreal.log("🔧 Creating ORM Material...")
+    
     try:
         import importlib
         import automatty_builder
         importlib.reload(automatty_builder)
         from automatty_builder import SubstrateMaterialBuilder
         
-        return SubstrateMaterialBuilder(), checkboxes
+        checkboxes = get_checkboxes()
+        builder = SubstrateMaterialBuilder()
         
-    except Exception as e:
-        unreal.log_error(f"❌ Builder import failed: {e}")
-        return None, {}
-
-def create_orm_material():
-    """Create ORM material"""
-    unreal.log("🔧 Creating ORM Material...")
-    
-    builder, checkboxes = setup_automatty_and_get_checkboxes()
-    if not builder:
-        return
-    
-    try:
         material = builder.create_orm_material(
             use_second_roughness=checkboxes['use_second_roughness'],
             use_nanite=checkboxes['use_nanite'],
@@ -613,11 +582,15 @@ def create_split_material():
     """Create Split material"""
     unreal.log("🔧 Creating Split Material...")
     
-    builder, checkboxes = setup_automatty_and_get_checkboxes()
-    if not builder:
-        return
-    
     try:
+        import importlib
+        import automatty_builder
+        importlib.reload(automatty_builder)
+        from automatty_builder import SubstrateMaterialBuilder
+        
+        checkboxes = get_checkboxes()
+        builder = SubstrateMaterialBuilder()
+        
         material = builder.create_split_material(
             use_second_roughness=checkboxes['use_second_roughness'],
             use_nanite=checkboxes['use_nanite'],
@@ -641,11 +614,15 @@ def create_advanced_material():
     """Create Advanced material"""
     unreal.log("🔧 Creating Advanced Material...")
     
-    builder, checkboxes = setup_automatty_and_get_checkboxes()
-    if not builder:
-        return
-    
     try:
+        import importlib
+        import automatty_builder
+        importlib.reload(automatty_builder)
+        from automatty_builder import SubstrateMaterialBuilder
+        
+        checkboxes = get_checkboxes()
+        builder = SubstrateMaterialBuilder()
+        
         material = builder.create_advanced_material(
             use_second_roughness=checkboxes['use_second_roughness'],
             use_nanite=checkboxes['use_nanite'],
@@ -669,20 +646,26 @@ def create_environment_material():
     """Create Environment material"""
     unreal.log("🔧 Creating Environment Material...")
     
-    builder, checkboxes = setup_automatty_and_get_checkboxes()
-    if not builder:
-        return
-    
     try:
+        import importlib
+        import automatty_builder
+        importlib.reload(automatty_builder)
+        from automatty_builder import SubstrateMaterialBuilder
+        
+        checkboxes = get_checkboxes()
+        builder = SubstrateMaterialBuilder()
+        
         material = builder.create_environment_material(
             use_adv_env=checkboxes['use_adv_env'],
-            use_triplanar=checkboxes['use_triplanar']
+            use_triplanar=checkboxes['use_triplanar'],
+            use_nanite=checkboxes['use_nanite']
         )
         
         if material:
             features = []
             if checkboxes['use_adv_env']: features.append("advanced-mixing")
             if checkboxes['use_triplanar']: features.append("triplanar")
+            if checkboxes['use_nanite']: features.append("nanite")
             feature_text = f" ({', '.join(features)})" if features else ""
             unreal.log(f"🎉 SUCCESS! Created Environment material{feature_text}: {material.get_name()}")
             if checkboxes['use_adv_env']:
@@ -697,22 +680,13 @@ def create_material_instance():
     """Create Material Instance"""
     unreal.log("🔧 Creating Smart Material Instance...")
     
-    engine_scripts_path = os.path.join(unreal.Paths.engine_dir(), "Plugins", "AutoMatty", "Scripts")
-    if engine_scripts_path not in sys.path:
-        sys.path.insert(0, engine_scripts_path)
-    
     try:
-        from automatty_utils import setup_automatty_imports
-        if not setup_automatty_imports():
-            unreal.log_error("❌ Failed to setup AutoMatty imports")
-            return
-        
         import importlib
         import automatty_instancer
         importlib.reload(automatty_instancer)
-        from automatty_instancer import create_material_instance_smart
+        from automatty_instancer import create_material_instance
         
-        instance = create_material_instance_smart()
+        instance = create_material_instance()
         
         if instance:
             unreal.log(f"🎉 SUCCESS! Created material instance: {instance.get_name()}")
@@ -726,16 +700,7 @@ def repath_material_instances():
     """Repath Material Instances"""
     unreal.log("🔧 Repathing Material Instances...")
     
-    engine_scripts_path = os.path.join(unreal.Paths.engine_dir(), "Plugins", "AutoMatty", "Scripts")
-    if engine_scripts_path not in sys.path:
-        sys.path.insert(0, engine_scripts_path)
-    
     try:
-        from automatty_utils import setup_automatty_imports
-        if not setup_automatty_imports():
-            unreal.log_error("❌ Failed to setup AutoMatty imports")
-            return
-        
         import importlib
         import automatty_repather
         importlib.reload(automatty_repather)
