@@ -519,12 +519,13 @@ def auto_save_texture_path():
 # ========================================
 
 def get_checkboxes():
-    """Get checkbox states from widget"""
+    """Get checkbox states from widget - UPDATED WITH TEXTURE VARIATION"""
     checkboxes = {
         'use_nanite': False,
         'use_second_roughness': False,
         'use_adv_env': False,
-        'use_triplanar': False
+        'use_triplanar': False,
+        'use_tex_var': False  # NEW - texture variation toggle
     }
     
     try:
@@ -534,21 +535,23 @@ def get_checkboxes():
             roughness_checkbox = widget.get_editor_property("UseSecondRoughness")
             adv_env_checkbox = widget.get_editor_property("UseAdvEnv")
             triplanar_checkbox = widget.get_editor_property("UseTriplanar")
+            tex_var_checkbox = widget.get_editor_property("UseTexVar")  # NEW
             
             checkboxes['use_nanite'] = nanite_checkbox.is_checked() if nanite_checkbox else False
             checkboxes['use_second_roughness'] = roughness_checkbox.is_checked() if roughness_checkbox else False
             checkboxes['use_adv_env'] = adv_env_checkbox.is_checked() if adv_env_checkbox else False
             checkboxes['use_triplanar'] = triplanar_checkbox.is_checked() if triplanar_checkbox else False
+            checkboxes['use_tex_var'] = tex_var_checkbox.is_checked() if tex_var_checkbox else False  # NEW
             
-            unreal.log(f"✅ Checkboxes: Nanite={checkboxes['use_nanite']}, SecondRough={checkboxes['use_second_roughness']}, AdvEnv={checkboxes['use_adv_env']}, Triplanar={checkboxes['use_triplanar']}")
+            unreal.log(f"✅ Checkboxes: Nanite={checkboxes['use_nanite']}, SecondRough={checkboxes['use_second_roughness']}, AdvEnv={checkboxes['use_adv_env']}, Triplanar={checkboxes['use_triplanar']}, TexVar={checkboxes['use_tex_var']}")
     except Exception as e:
         unreal.log_error(f"⚠️ Checkbox access failed: {e}")
     
     return checkboxes
 
 def create_orm_material():
-    """Create ORM material"""
-    unreal.log("🔧 Creating ORM Material...")
+    """Create ORM material - UPDATED WITH UV SCALE AND TEXTURE VARIATION"""
+    unreal.log("🔧 Creating ORM Material with UV scaling and variation support...")
     
     try:
         import importlib
@@ -562,7 +565,8 @@ def create_orm_material():
         material = builder.create_orm_material(
             use_second_roughness=checkboxes['use_second_roughness'],
             use_nanite=checkboxes['use_nanite'],
-            use_triplanar=checkboxes['use_triplanar']
+            use_triplanar=checkboxes['use_triplanar'],
+            use_tex_var=checkboxes['use_tex_var']  # NEW
         )
         
         if material:
@@ -570,8 +574,10 @@ def create_orm_material():
             if checkboxes['use_second_roughness']: features.append("dual-roughness")
             if checkboxes['use_nanite']: features.append("nanite displacement")
             if checkboxes['use_triplanar']: features.append("triplanar mapping")
+            if checkboxes['use_tex_var']: features.append("texture variation")  # NEW
             feature_text = f" with {', '.join(features)}" if features else ""
             unreal.log(f"🎉 SUCCESS! Created ORM material{feature_text}: {material.get_name()}")
+            unreal.log(f"💡 UV scaling and texture variation now available on ALL material types!")
         else:
             unreal.log_error("❌ Failed to create ORM material")
             
@@ -579,8 +585,8 @@ def create_orm_material():
         unreal.log_error(f"❌ Error creating ORM material: {e}")
 
 def create_split_material():
-    """Create Split material"""
-    unreal.log("🔧 Creating Split Material...")
+    """Create Split material - UPDATED WITH UV SCALE AND TEXTURE VARIATION"""
+    unreal.log("🔧 Creating Split Material with UV scaling and variation support...")
     
     try:
         import importlib
@@ -594,7 +600,8 @@ def create_split_material():
         material = builder.create_split_material(
             use_second_roughness=checkboxes['use_second_roughness'],
             use_nanite=checkboxes['use_nanite'],
-            use_triplanar=checkboxes['use_triplanar']
+            use_triplanar=checkboxes['use_triplanar'],
+            use_tex_var=checkboxes['use_tex_var']  # NEW
         )
         
         if material:
@@ -602,48 +609,18 @@ def create_split_material():
             if checkboxes['use_second_roughness']: features.append("dual-roughness")
             if checkboxes['use_nanite']: features.append("nanite displacement")
             if checkboxes['use_triplanar']: features.append("triplanar mapping")
+            if checkboxes['use_tex_var']: features.append("texture variation")  # NEW
             feature_text = f" with {', '.join(features)}" if features else ""
             unreal.log(f"🎉 SUCCESS! Created Split material{feature_text}: {material.get_name()}")
+            unreal.log(f"💡 UV scaling and texture variation now available on ALL material types!")
         else:
             unreal.log_error("❌ Failed to create Split material")
             
     except Exception as e:
         unreal.log_error(f"❌ Error creating Split material: {e}")
 
-def create_advanced_material():
-    """Create Advanced material"""
-    unreal.log("🔧 Creating Advanced Material...")
-    
-    try:
-        import importlib
-        import automatty_builder
-        importlib.reload(automatty_builder)
-        from automatty_builder import SubstrateMaterialBuilder
-        
-        checkboxes = get_checkboxes()
-        builder = SubstrateMaterialBuilder()
-        
-        material = builder.create_advanced_material(
-            use_second_roughness=checkboxes['use_second_roughness'],
-            use_nanite=checkboxes['use_nanite'],
-            use_triplanar=checkboxes['use_triplanar']
-        )
-        
-        if material:
-            features = []
-            if checkboxes['use_second_roughness']: features.append("dual-roughness")
-            if checkboxes['use_nanite']: features.append("nanite displacement")
-            if checkboxes['use_triplanar']: features.append("triplanar mapping")
-            feature_text = f" with {', '.join(features)}" if features else ""
-            unreal.log(f"🎉 SUCCESS! Created Advanced material{feature_text}: {material.get_name()}")
-        else:
-            unreal.log_error("❌ Failed to create Advanced material")
-            
-    except Exception as e:
-        unreal.log_error(f"❌ Error creating Advanced material: {e}")
-
 def create_environment_material():
-    """Create Environment material"""
+    """Create Environment material - UPDATED WITH TEXTURE VARIATION"""
     unreal.log("🔧 Creating Environment Material...")
     
     try:
@@ -658,7 +635,8 @@ def create_environment_material():
         material = builder.create_environment_material(
             use_adv_env=checkboxes['use_adv_env'],
             use_triplanar=checkboxes['use_triplanar'],
-            use_nanite=checkboxes['use_nanite']
+            use_nanite=checkboxes['use_nanite'],
+            use_tex_var=checkboxes['use_tex_var']  # NEW
         )
         
         if material:
@@ -666,6 +644,7 @@ def create_environment_material():
             if checkboxes['use_adv_env']: features.append("advanced-mixing")
             if checkboxes['use_triplanar']: features.append("triplanar")
             if checkboxes['use_nanite']: features.append("nanite")
+            if checkboxes['use_tex_var']: features.append("texture-variation")  # NEW
             feature_text = f" ({', '.join(features)})" if features else ""
             unreal.log(f"🎉 SUCCESS! Created Environment material{feature_text}: {material.get_name()}")
             if checkboxes['use_adv_env']:

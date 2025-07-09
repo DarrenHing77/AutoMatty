@@ -1,5 +1,5 @@
 """
-AutoMatty Material Builder - Fixed Version with Proper Height Parameter Handling
+AutoMatty Material Builder - Complete Version with Texture Variation & UV Scale Support
 """
 import unreal
 
@@ -14,7 +14,7 @@ except ImportError as e:
     raise
 
 class SubstrateMaterialBuilder:
-    """Complete Substrate material builder with all fixes"""
+    """Complete Substrate material builder with texture variation and UV scale support"""
     
     def __init__(self, custom_paths=None):
         self.config = AutoMattyConfig()
@@ -30,8 +30,8 @@ class SubstrateMaterialBuilder:
             if hasattr(self.config, key):
                 setattr(self.config, key, value)
     
-    def create_orm_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False, use_triplanar=False):
-        """Create ORM material with all features"""
+    def create_orm_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False, use_triplanar=False, use_tex_var=False):
+        """Create ORM material with all features including texture variation"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
@@ -48,7 +48,7 @@ class SubstrateMaterialBuilder:
         if use_nanite:
             material.set_editor_property("enable_tessellation", True)
         
-        self._build_standard_graph(material, material_type="orm", use_second_roughness=use_second_roughness, use_nanite=use_nanite, use_triplanar=use_triplanar)
+        self._build_standard_graph(material, material_type="orm", use_second_roughness=use_second_roughness, use_nanite=use_nanite, use_triplanar=use_triplanar, use_tex_var=use_tex_var)
         
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
@@ -57,13 +57,14 @@ class SubstrateMaterialBuilder:
         if use_triplanar: features.append("triplanar")
         if use_second_roughness: features.append("dual-roughness")
         if use_nanite: features.append("nanite")
+        if use_tex_var: features.append("texture-variation")
         feature_text = f" ({', '.join(features)})" if features else ""
         
         unreal.log(f"✅ ORM material '{name}'{feature_text} created")
         return material
     
-    def create_split_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False, use_triplanar=False):
-        """Create Split material with all features"""
+    def create_split_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False, use_triplanar=False, use_tex_var=False):
+        """Create Split material with all features including texture variation"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
@@ -80,7 +81,7 @@ class SubstrateMaterialBuilder:
         if use_nanite:
             material.set_editor_property("enable_tessellation", True)
         
-        self._build_standard_graph(material, material_type="split", use_second_roughness=use_second_roughness, use_nanite=use_nanite, use_triplanar=use_triplanar)
+        self._build_standard_graph(material, material_type="split", use_second_roughness=use_second_roughness, use_nanite=use_nanite, use_triplanar=use_triplanar, use_tex_var=use_tex_var)
         
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
@@ -89,45 +90,16 @@ class SubstrateMaterialBuilder:
         if use_triplanar: features.append("triplanar")
         if use_second_roughness: features.append("dual-roughness")
         if use_nanite: features.append("nanite")
+        if use_tex_var: features.append("texture-variation")
         feature_text = f" ({', '.join(features)})" if features else ""
         
         unreal.log(f"✅ Split material '{name}'{feature_text} created")
         return material
     
-    def create_advanced_material(self, base_name=None, custom_path=None, use_second_roughness=False, use_nanite=False, use_triplanar=False):
-        """Create Advanced material with all features"""
-        if not AutoMattyUtils.is_substrate_enabled():
-            unreal.log_error("❌ Substrate is not enabled in project settings!")
-            return None
-        
-        if base_name is None:
-            custom_prefix = AutoMattyConfig.get_custom_material_prefix()
-            base_name = f"{custom_prefix}_Advanced"
-        
-        folder = custom_path or AutoMattyConfig.get_custom_material_path()
-        name = AutoMattyUtils.get_next_asset_name(base_name, folder)
-        
-        material = self.atools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
-        
-        if use_nanite:
-            material.set_editor_property("enable_tessellation", True)
-        
-        self._build_standard_graph(material, material_type="orm", use_second_roughness=use_second_roughness, use_nanite=use_nanite, use_triplanar=use_triplanar)
-        
-        self.lib.recompile_material(material)
-        unreal.EditorAssetLibrary.save_loaded_asset(material)
-        
-        features = []
-        if use_triplanar: features.append("triplanar")
-        if use_second_roughness: features.append("dual-roughness")
-        if use_nanite: features.append("nanite")
-        feature_text = f" ({', '.join(features)})" if features else ""
-        
-        unreal.log(f"✅ Advanced material '{name}'{feature_text} created")
-        return material
+
     
-    def create_environment_material(self, base_name=None, custom_path=None, use_adv_env=False, use_triplanar=False, use_nanite=False):
-        """Create Environment material (simple or advanced) with triplanar and nanite support"""
+    def create_environment_material(self, base_name=None, custom_path=None, use_adv_env=False, use_triplanar=False, use_nanite=False, use_tex_var=False):
+        """Create Environment material with UV scale and texture variation support"""
         if not AutoMattyUtils.is_substrate_enabled():
             unreal.log_error("❌ Substrate is not enabled in project settings!")
             return None
@@ -148,9 +120,9 @@ class SubstrateMaterialBuilder:
             unreal.log(f"🏔️ Enabled tessellation for nanite displacement")
         
         if use_adv_env:
-            self._build_environment_graph_advanced(material, use_triplanar=use_triplanar, use_nanite=use_nanite)
+            self._build_environment_graph_advanced(material, use_triplanar=use_triplanar, use_nanite=use_nanite, use_tex_var=use_tex_var)
         else:
-            self._build_environment_graph_simple(material, use_triplanar=use_triplanar, use_nanite=use_nanite)
+            self._build_environment_graph_simple(material, use_triplanar=use_triplanar, use_nanite=use_nanite, use_tex_var=use_tex_var)
         
         self.lib.recompile_material(material)
         unreal.EditorAssetLibrary.save_loaded_asset(material)
@@ -159,16 +131,17 @@ class SubstrateMaterialBuilder:
         if use_triplanar: features.append("triplanar")
         if use_adv_env: features.append("advanced-mixing")
         if use_nanite: features.append("nanite")
+        if use_tex_var: features.append("texture-variation")
         feature_text = f" ({', '.join(features)})" if features else ""
         
         unreal.log(f"✅ Environment material '{name}'{feature_text} created")
         return material
     
-    def _build_standard_graph(self, material, material_type="orm", use_second_roughness=False, use_nanite=False, use_triplanar=False):
-        """Build standard material graph with all fixes applied"""
+    def _build_standard_graph(self, material, material_type="orm", use_second_roughness=False, use_nanite=False, use_triplanar=False, use_tex_var=False):
+        """Build standard material graph with UV scale and texture variation support"""
         default_normal = AutoMattyUtils.find_default_normal()
         
-        # Texture coordinates
+        # Base texture coordinates
         if material_type == "orm":
             coords = {
                 "Color": (-1400, -200),
@@ -189,12 +162,64 @@ class SubstrateMaterialBuilder:
             coords["Height"] = (-1400, -800)
             unreal.log(f"🏔️ Adding Height parameter for nanite displacement")
         
-        # Create textures - FIXED triplanar logic with corrected input pins and function names
+        # UV SCALE SETUP (like environment materials)
+        tex_coords = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -2000, -50)
+        
+        # UV Scale parameter
+        uv_scale_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -2000, -100)
+        uv_scale_param.set_editor_property("parameter_name", "UVScale")
+        uv_scale_param.set_editor_property("default_value", 1.0)
+        uv_scale_param.set_editor_property("group", "UV Controls")
+        
+        # Scale the UVs
+        uv_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1900, -75)
+        self.lib.connect_material_expressions(tex_coords, "", uv_multiply, "A")
+        self.lib.connect_material_expressions(uv_scale_param, "", uv_multiply, "B")
+        
+        # TEXTURE VARIATION SETUP
+        variation_uvs = None
+        if use_tex_var:
+            unreal.log(f"🎲 Setting up texture variation system for {material_type}")
+            
+            # Create Variation Height Map parameter
+            var_height_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1900, -150)
+            var_height_param.set_editor_property("parameter_name", "VariationHeightMap")
+            var_height_param.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
+            var_height_param.set_editor_property("group", "Texture Variation")
+            
+            # Random Rotation and Scale boolean parameter
+            random_rot_scale_param = self.lib.create_material_expression(material, unreal.MaterialExpressionStaticSwitchParameter, -1900, -200)
+            random_rot_scale_param.set_editor_property("parameter_name", "RandomRotationScale")
+            random_rot_scale_param.set_editor_property("default_value", True)
+            random_rot_scale_param.set_editor_property("group", "Texture Variation")
+            
+            # TextureVariation function
+            texture_var_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, -1700, -125)
+            texture_variation_function = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions03/Texturing/TextureVariation")
+            
+            if texture_variation_function:
+                texture_var_func.set_editor_property("material_function", texture_variation_function)
+                
+                # Connect scaled UVs to TextureVariation function
+                self.lib.connect_material_expressions(uv_multiply, "", texture_var_func, "UVs")
+                self.lib.connect_material_expressions(var_height_param, "", texture_var_func, "Heightmap")
+                self.lib.connect_material_expressions(random_rot_scale_param, "", texture_var_func, "Random Rotation and Scale")
+                
+                # Use the output UVs for texture sampling
+                variation_uvs = texture_var_func
+                unreal.log(f"✅ Texture variation function connected for {material_type}")
+            else:
+                unreal.log_error(f"❌ TextureVariation function not found")
+                variation_uvs = uv_multiply  # Fallback to scaled UVs
+        else:
+            variation_uvs = uv_multiply  # Use scaled UVs without variation
+        
+        # Create texture samples with variation UVs if enabled
         samples = {}
         
         for pname, (x, y) in coords.items():
             if use_triplanar:
-                # Create texture object parameter with proper grouping
+                # Triplanar setup
                 texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
                 texture_param.set_editor_property("parameter_name", pname)
                 
@@ -210,7 +235,6 @@ class SubstrateMaterialBuilder:
                 elif pname == "Emission":
                     texture_param.set_editor_property("group", "Emission")
                 
-                # Create the appropriate world-aligned function
                 if pname == "Normal":
                     # WorldAlignedNormal for normals
                     world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
@@ -218,24 +242,32 @@ class SubstrateMaterialBuilder:
                     
                     if world_aligned_normal:
                         world_align_func.set_editor_property("material_function", world_aligned_normal)
-                        # FIXED: Connect to "TextureObject" input (no space)
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
-                        # Store with explicit XYZ Texture output
+                        
+                        # Connect variation UVs if available
+                        if variation_uvs:
+                            self.lib.connect_material_expressions(variation_uvs, "", world_align_func, "UVs")
+                            unreal.log(f"🎲 Connected variation UVs to triplanar normal {pname}")
+                        
                         samples[pname] = (world_align_func, "XYZ Texture")
                         unreal.log(f"🔺 Triplanar Normal setup: {pname}")
                     else:
                         unreal.log_error(f"❌ WorldAlignedNormal function not found, falling back to regular sample")
-                        samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
+                        samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal, variation_uvs)
                 else:
-                    # FIXED: WorldAlignedTexture (not WorldAlignTexture)
+                    # WorldAlignedTexture for everything else
                     world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
                     world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedTexture")
                     
                     if world_aligned_texture:
                         world_align_func.set_editor_property("material_function", world_aligned_texture)
-                        # FIXED: Connect to "TextureObject" input (no space)
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
-                        # Store with explicit XYZ Texture output
+                        
+                        # Connect variation UVs if available
+                        if variation_uvs:
+                            self.lib.connect_material_expressions(variation_uvs, "", world_align_func, "UVs")
+                            unreal.log(f"🎲 Connected variation UVs to triplanar {pname}")
+                        
                         samples[pname] = (world_align_func, "XYZ Texture")
                         if pname == "Height":
                             unreal.log(f"🏔️ Triplanar Height setup: {pname}")
@@ -243,10 +275,10 @@ class SubstrateMaterialBuilder:
                             unreal.log(f"🔺 Triplanar Texture setup: {pname}")
                     else:
                         unreal.log_error(f"❌ WorldAlignedTexture function not found, falling back to regular sample")
-                        samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
+                        samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal, variation_uvs)
             else:
-                # Regular texture samples (non-triplanar)
-                samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal)
+                # Regular texture samples (non-triplanar) with variation UVs
+                samples[pname] = self._create_regular_texture_sample(material, pname, x, y, default_normal, variation_uvs)
         
         # Helper function to connect samples (handles both regular and triplanar)
         def connect_sample(sample, target_node, target_input):
@@ -396,12 +428,12 @@ class SubstrateMaterialBuilder:
         self.lib.connect_material_expressions(hue_shift_function, "", use_diffuse_switch, "True")
         self.lib.connect_material_expressions(mfp_color_param, "", use_diffuse_switch, "False")
         
-        # Nanite displacement - FIXED
+        # Nanite displacement
         displacement_final = None
         if use_nanite and "Height" in samples:
             displacement_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -850)
             displacement_intensity.set_editor_property("parameter_name", "DisplacementIntensity")
-            displacement_intensity.set_editor_property("default_value", 0.1)  # Better default
+            displacement_intensity.set_editor_property("default_value", 0.1)
             displacement_intensity.set_editor_property("group", "Displacement")
             
             displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -700, -800)
@@ -448,30 +480,28 @@ class SubstrateMaterialBuilder:
         # Connect to outputs
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
         
-        # FIXED: Use proper displacement output for Nanite  
+        # Connect displacement for Nanite  
         if use_nanite and displacement_final:
-            # Try different displacement property names for UE 5.6
             try:
                 self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_DISPLACEMENT)
                 unreal.log(f"🏔️ Connected displacement to MP_DISPLACEMENT")
             except AttributeError:
                 try:
-                    # Alternative property name in some UE versions
                     self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_TESSELLATION_MULTIPLIER)
                     unreal.log(f"🏔️ Connected displacement to MP_TESSELLATION_MULTIPLIER")
                 except AttributeError:
-                    # Check what properties actually exist
-                    available_props = [prop for prop in dir(unreal.MaterialProperty) if prop.startswith('MP_')]
-                    displacement_props = [prop for prop in available_props if 'DISPLACE' in prop.upper() or 'TESS' in prop.upper()]
-                    unreal.log_error(f"❌ Available displacement properties: {displacement_props}")
-                    # Fallback to world position offset
                     self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
                     unreal.log_warning(f"⚠️ Using MP_WORLD_POSITION_OFFSET as fallback")
     
-    def _create_regular_texture_sample(self, material, param_name, x, y, default_normal=None):
-        """Create regular texture sample with proper parameter grouping"""
+    def _create_regular_texture_sample(self, material, param_name, x, y, default_normal=None, variation_uvs=None):
+        """Create regular texture sample with optional variation UVs"""
         node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
         node.set_editor_property("parameter_name", param_name)
+        
+        # Connect variation UVs if provided
+        if variation_uvs:
+            self.lib.connect_material_expressions(variation_uvs, "", node, "UVs")
+            unreal.log(f"🎲 Connected variation UVs to {param_name}")
         
         # Set parameter groups for better organization
         if param_name == "Height":
@@ -489,12 +519,65 @@ class SubstrateMaterialBuilder:
             node.set_editor_property("group", param_name)
         elif param_name == "Emission":
             node.set_editor_property("group", "Emission")
+        elif param_name == "VariationHeightMap":
+            node.set_editor_property("group", "Texture Variation")
         
         return node
     
-    def _build_environment_graph_simple(self, material, use_triplanar=False, use_nanite=False):
-        """Build simple environment material with lerp blending and proper triplanar support"""
+    def _build_environment_graph_simple(self, material, use_triplanar=False, use_nanite=False, use_tex_var=False):
+        """Build simple environment material with UV scale and texture variation"""
         default_normal = AutoMattyUtils.find_default_normal()
+        
+        # UV SCALE SETUP FOR ENVIRONMENT
+        tex_coords = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -2000, -50)
+        
+        # UV Scale parameter
+        uv_scale_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -2000, -100)
+        uv_scale_param.set_editor_property("parameter_name", "UVScale")
+        uv_scale_param.set_editor_property("default_value", 1.0)
+        uv_scale_param.set_editor_property("group", "Environment")
+        
+        # Scale the UVs
+        uv_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1900, -75)
+        self.lib.connect_material_expressions(tex_coords, "", uv_multiply, "A")
+        self.lib.connect_material_expressions(uv_scale_param, "", uv_multiply, "B")
+        
+        # TEXTURE VARIATION SETUP
+        variation_uvs = None
+        if use_tex_var:
+            unreal.log(f"🎲 Setting up environment texture variation system")
+            
+            # Create Variation Height Map parameter
+            var_height_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1900, -150)
+            var_height_param.set_editor_property("parameter_name", "VariationHeightMap")
+            var_height_param.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
+            var_height_param.set_editor_property("group", "Texture Variation")
+            
+            # Random Rotation and Scale boolean parameter
+            random_rot_scale_param = self.lib.create_material_expression(material, unreal.MaterialExpressionStaticSwitchParameter, -1900, -200)
+            random_rot_scale_param.set_editor_property("parameter_name", "RandomRotationScale")
+            random_rot_scale_param.set_editor_property("default_value", True)
+            random_rot_scale_param.set_editor_property("group", "Texture Variation")
+            
+            # TextureVariation function
+            texture_var_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, -1700, -125)
+            texture_variation_function = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions03/Texturing/TextureVariation")
+            
+            if texture_variation_function:
+                texture_var_func.set_editor_property("material_function", texture_variation_function)
+                
+                # Connect scaled UVs and other inputs
+                self.lib.connect_material_expressions(uv_multiply, "", texture_var_func, "UVs")
+                self.lib.connect_material_expressions(var_height_param, "", texture_var_func, "Heightmap")
+                self.lib.connect_material_expressions(random_rot_scale_param, "", texture_var_func, "Random Rotation and Scale")
+                
+                variation_uvs = texture_var_func
+                unreal.log(f"✅ Environment texture variation function connected")
+            else:
+                unreal.log_error(f"❌ TextureVariation function not found")
+                variation_uvs = uv_multiply  # Fallback to scaled UVs
+        else:
+            variation_uvs = uv_multiply  # Use scaled UVs without variation
         
         # Helper function to connect samples (handles both regular and triplanar)
         def connect_sample(sample, target_node, target_input):
@@ -549,11 +632,16 @@ class SubstrateMaterialBuilder:
                     if world_aligned_normal:
                         world_align_func.set_editor_property("material_function", world_aligned_normal)
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        
+                        # Connect variation UVs if available
+                        if variation_uvs:
+                            self.lib.connect_material_expressions(variation_uvs, "", world_align_func, "UVs")
+                        
                         samples[param_name] = (world_align_func, "XYZ Texture")
                         unreal.log(f"✅ Triplanar Normal: {param_name}")
                     else:
                         unreal.log_error(f"❌ WorldAlignedNormal not found for {param_name}")
-                        samples[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                        samples[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
                 else:
                     # WorldAlignedTexture for everything else
                     world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
@@ -562,39 +650,28 @@ class SubstrateMaterialBuilder:
                     if world_aligned_texture:
                         world_align_func.set_editor_property("material_function", world_aligned_texture)
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        
+                        # Connect variation UVs if available
+                        if variation_uvs:
+                            self.lib.connect_material_expressions(variation_uvs, "", world_align_func, "UVs")
+                        
                         samples[param_name] = (world_align_func, "XYZ Texture")
                         unreal.log(f"✅ Triplanar Texture: {param_name}")
                     else:
                         unreal.log_error(f"❌ WorldAlignedTexture not found for {param_name}")
-                        samples[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                        samples[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
             else:
                 # Regular texture samples
-                tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
-                tex_node.set_editor_property("parameter_name", param_name)
-                
-                # Set parameter groups
-                if "Color" in param_name:
-                    tex_node.set_editor_property("group", "Color")
-                elif "Normal" in param_name:
-                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-                    tex_node.set_editor_property("group", "Normal")
-                    if default_normal:
-                        tex_node.set_editor_property("texture", default_normal)
-                elif "Roughness" in param_name:
-                    tex_node.set_editor_property("group", "Roughness")
-                elif "Metallic" in param_name:
-                    tex_node.set_editor_property("group", "Metallic")
-                elif "Height" in param_name:
-                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
-                    tex_node.set_editor_property("group", "Displacement")
-                    unreal.log(f"🏔️ Environment Height texture sample: {param_name}")
-                
-                samples[param_name] = tex_node
+                samples[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
         
         # Blend mask
         blend_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1600, -100)
         blend_mask.set_editor_property("parameter_name", "BlendMask")
         blend_mask.set_editor_property("group", "Environment")
+        
+        # Connect variation UVs to blend mask if available
+        if variation_uvs:
+            self.lib.connect_material_expressions(variation_uvs, "", blend_mask, "UVs")
         
         # Simple lerps
         color_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -250)
@@ -674,13 +751,64 @@ class SubstrateMaterialBuilder:
                     self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
                     unreal.log_warning(f"⚠️ Environment displacement using MP_WORLD_POSITION_OFFSET as fallback")
         
-        unreal.log("✅ Simple environment material with texture blending created!")
+        unreal.log("✅ Simple environment material with UV scale and texture variation created!")
     
-    def _build_environment_graph_advanced(self, material, use_triplanar=False, use_nanite=False):
-        """Build advanced environment material with dual slabs and simple world-space mixing"""
+    def _build_environment_graph_advanced(self, material, use_triplanar=False, use_nanite=False, use_tex_var=False):
+        """Build advanced environment material with UV scale and texture variation"""
         default_normal = AutoMattyUtils.find_default_normal()
         
         unreal.log("🎛️ Building advanced dual-slab environment material...")
+        
+        # UV SCALE SETUP FOR ADVANCED ENVIRONMENT
+        tex_coords = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -2000, -50)
+        
+        # UV Scale parameter
+        uv_scale_param = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -2000, -100)
+        uv_scale_param.set_editor_property("parameter_name", "UVScale")
+        uv_scale_param.set_editor_property("default_value", 1.0)
+        uv_scale_param.set_editor_property("group", "Environment")
+        
+        # Scale the UVs
+        uv_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1900, -75)
+        self.lib.connect_material_expressions(tex_coords, "", uv_multiply, "A")
+        self.lib.connect_material_expressions(uv_scale_param, "", uv_multiply, "B")
+        
+        # TEXTURE VARIATION SETUP FOR ADVANCED
+        variation_uvs = None
+        if use_tex_var:
+            unreal.log(f"🎲 Setting up advanced environment texture variation system")
+            
+            # Create Variation Height Map parameter
+            var_height_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1900, -150)
+            var_height_param.set_editor_property("parameter_name", "VariationHeightMap")
+            var_height_param.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
+            var_height_param.set_editor_property("group", "Texture Variation")
+            
+            # Random Rotation and Scale boolean parameter
+            random_rot_scale_param = self.lib.create_material_expression(material, unreal.MaterialExpressionStaticSwitchParameter, -1900, -200)
+            random_rot_scale_param.set_editor_property("parameter_name", "RandomRotationScale")
+            random_rot_scale_param.set_editor_property("default_value", True)
+            random_rot_scale_param.set_editor_property("group", "Texture Variation")
+            
+            # TextureVariation function
+            texture_var_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, -1700, -125)
+            texture_variation_function = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions03/Texturing/TextureVariation")
+            
+            if texture_variation_function:
+                texture_var_func.set_editor_property("material_function", texture_variation_function)
+                
+                # Connect scaled UVs and other inputs
+                self.lib.connect_material_expressions(uv_multiply, "", texture_var_func, "UVs")
+                self.lib.connect_material_expressions(var_height_param, "", texture_var_func, "Heightmap")
+                self.lib.connect_material_expressions(random_rot_scale_param, "", texture_var_func, "Random Rotation and Scale")
+                
+                variation_uvs = texture_var_func
+                unreal.log(f"✅ Advanced environment texture variation function connected")
+            else:
+                unreal.log_error(f"❌ TextureVariation function not found")
+                variation_uvs = uv_multiply  # Fallback to scaled UVs
+        else:
+            variation_uvs = uv_multiply  # Use scaled UVs without variation
         
         # Helper function to connect samples (handles both regular and triplanar)
         def connect_sample(sample, target_node, target_input):
@@ -715,7 +843,7 @@ class SubstrateMaterialBuilder:
         samples_a = {}
         samples_b = {}
         
-        # Create Material A textures
+        # Create Material A textures with variation UVs
         for param_name, (x, y) in texture_coords_a.items():
             if use_triplanar:
                 texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
@@ -728,32 +856,26 @@ class SubstrateMaterialBuilder:
                     if world_aligned_normal:
                         world_align_func.set_editor_property("material_function", world_aligned_normal)
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        if variation_uvs:
+                            self.lib.connect_material_expressions(variation_uvs, "", world_align_func, "UVs")
                         samples_a[param_name] = (world_align_func, "XYZ Texture")
                     else:
-                        samples_a[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                        samples_a[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
                 else:
                     world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
                     world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedTexture")
                     if world_aligned_texture:
                         world_align_func.set_editor_property("material_function", world_aligned_texture)
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        if variation_uvs:
+                            self.lib.connect_material_expressions(variation_uvs, "", world_align_func, "UVs")
                         samples_a[param_name] = (world_align_func, "XYZ Texture")
                     else:
-                        samples_a[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                        samples_a[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
             else:
-                tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
-                tex_node.set_editor_property("parameter_name", param_name)
-                tex_node.set_editor_property("group", "Material A")
-                if "Normal" in param_name:
-                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-                    if default_normal:
-                        tex_node.set_editor_property("texture", default_normal)
-                elif "Height" in param_name:
-                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
-                    unreal.log(f"🏔️ Advanced environment Height A texture sample: {param_name}")
-                samples_a[param_name] = tex_node
+                samples_a[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
         
-        # Create Material B textures
+        # Create Material B textures with variation UVs
         for param_name, (x, y) in texture_coords_b.items():
             if use_triplanar:
                 texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
@@ -766,30 +888,24 @@ class SubstrateMaterialBuilder:
                     if world_aligned_normal:
                         world_align_func.set_editor_property("material_function", world_aligned_normal)
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        if variation_uvs:
+                            self.lib.connect_material_expressions(variation_uvs, "", world_align_func, "UVs")
                         samples_b[param_name] = (world_align_func, "XYZ Texture")
                     else:
-                        samples_b[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                        samples_b[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
                 else:
                     world_align_func = self.lib.create_material_expression(material, unreal.MaterialExpressionMaterialFunctionCall, x, y)
                     world_aligned_texture = unreal.EditorAssetLibrary.load_asset("/Engine/Functions/Engine_MaterialFunctions01/Texturing/WorldAlignedTexture")
                     if world_aligned_texture:
                         world_align_func.set_editor_property("material_function", world_aligned_texture)
                         self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+                        if variation_uvs:
+                            self.lib.connect_material_expressions(variation_uvs, "", world_align_func, "UVs")
                         samples_b[param_name] = (world_align_func, "XYZ Texture")
                     else:
-                        samples_b[param_name] = self._create_regular_texture_sample(material, param_name, x, y, default_normal)
+                        samples_b[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
             else:
-                tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
-                tex_node.set_editor_property("parameter_name", param_name)
-                tex_node.set_editor_property("group", "Material B")
-                if "Normal" in param_name:
-                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-                    if default_normal:
-                        tex_node.set_editor_property("texture", default_normal)
-                elif "Height" in param_name:
-                    tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
-                    unreal.log(f"🏔️ Advanced environment Height B texture sample: {param_name}")
-                samples_b[param_name] = tex_node
+                samples_b[param_name] = self._create_regular_texture_sample_env(material, param_name, x, y, default_normal, variation_uvs)
         
         # Create SLAB A
         slab_a = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -1400, -350)
@@ -805,28 +921,7 @@ class SubstrateMaterialBuilder:
         connect_sample(samples_b["RoughnessB"], slab_b, "Roughness")
         connect_sample(samples_b["MetallicB"], slab_b, "F0")
         
-        # Displacement setup for advanced environment
-        displacement_final = None
-        if use_nanite and "HeightA" in samples_a and "HeightB" in samples_b:
-            # Lerp between height A and B using the same world-space mixing pattern
-            height_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -1150)
-            connect_sample(samples_a["HeightA"], height_lerp, "A")
-            connect_sample(samples_b["HeightB"], height_lerp, "B")
-            # Connect the same frac pattern we'll create below
-            
-            displacement_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1400, -1200)
-            displacement_intensity.set_editor_property("parameter_name", "DisplacementIntensity")
-            displacement_intensity.set_editor_property("default_value", 0.1)
-            displacement_intensity.set_editor_property("group", "Displacement")
-            
-            displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1000, -1150)
-            self.lib.connect_material_expressions(height_lerp, "", displacement_multiply, "A")
-            self.lib.connect_material_expressions(displacement_intensity, "", displacement_multiply, "B")
-            
-            displacement_final = displacement_multiply
-            unreal.log(f"🏔️ Advanced environment displacement setup complete")
-        
-        # Simple world-space mixing
+        # Simple world-space mixing using scaled UVs
         world_pos = self.lib.create_material_expression(material, unreal.MaterialExpressionWorldPosition, -1600, -100)
         
         # Break out just the Z component for height-based mixing
@@ -851,15 +946,26 @@ class SubstrateMaterialBuilder:
         frac_node = self.lib.create_material_expression(material, unreal.MaterialExpressionFrac, -1300, -125)
         self.lib.connect_material_expressions(scale_multiply, "", frac_node, "")
         
-        # Connect frac to height lerp if displacement is enabled
-        if use_nanite and displacement_final:
-            # Find the height_lerp we created earlier
-            height_lerp_nodes = [node for node in material.get_editor_property('expressions') 
-                               if isinstance(node, unreal.MaterialExpressionLinearInterpolate) 
-                               and node.get_editor_property('node_pos_y') == -1150]
-            if height_lerp_nodes:
-                self.lib.connect_material_expressions(frac_node, "", height_lerp_nodes[0], "Alpha")
-                unreal.log(f"🏔️ Connected world-space mixing to height lerp")
+        # Displacement setup for advanced environment
+        displacement_final = None
+        if use_nanite and "HeightA" in samples_a and "HeightB" in samples_b:
+            # Lerp between height A and B using the world-space mixing pattern
+            height_lerp = self.lib.create_material_expression(material, unreal.MaterialExpressionLinearInterpolate, -1200, -1150)
+            connect_sample(samples_a["HeightA"], height_lerp, "A")
+            connect_sample(samples_b["HeightB"], height_lerp, "B")
+            self.lib.connect_material_expressions(frac_node, "", height_lerp, "Alpha")
+            
+            displacement_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1400, -1200)
+            displacement_intensity.set_editor_property("parameter_name", "DisplacementIntensity")
+            displacement_intensity.set_editor_property("default_value", 0.1)
+            displacement_intensity.set_editor_property("group", "Displacement")
+            
+            displacement_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1000, -1150)
+            self.lib.connect_material_expressions(height_lerp, "", displacement_multiply, "A")
+            self.lib.connect_material_expressions(displacement_intensity, "", displacement_multiply, "B")
+            
+            displacement_final = displacement_multiply
+            unreal.log(f"🏔️ Advanced environment displacement setup complete")
         
         # SUBSTRATE HORIZONTAL MIXING NODE
         substrate_mix = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateHorizontalMixing, -1000, -550)
@@ -883,7 +989,36 @@ class SubstrateMaterialBuilder:
                     self.lib.connect_material_property(displacement_final, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
                     unreal.log_warning(f"⚠️ Advanced environment displacement using MP_WORLD_POSITION_OFFSET as fallback")
         
-        unreal.log("✅ Advanced dual-slab environment with world-space mixing created!")
+        unreal.log("✅ Advanced dual-slab environment with UV scale and texture variation created!")
+    
+    def _create_regular_texture_sample_env(self, material, param_name, x, y, default_normal=None, variation_uvs=None):
+        """Create regular texture sample for environment materials with variation UVs"""
+        tex_node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
+        tex_node.set_editor_property("parameter_name", param_name)
+        
+        # Connect variation UVs if provided
+        if variation_uvs:
+            self.lib.connect_material_expressions(variation_uvs, "", tex_node, "UVs")
+            unreal.log(f"🎲 Connected variation UVs to environment {param_name}")
+        
+        # Set parameter groups
+        if "Color" in param_name:
+            tex_node.set_editor_property("group", "Color")
+        elif "Normal" in param_name:
+            tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+            tex_node.set_editor_property("group", "Normal")
+            if default_normal:
+                tex_node.set_editor_property("texture", default_normal)
+        elif "Roughness" in param_name:
+            tex_node.set_editor_property("group", "Roughness")
+        elif "Metallic" in param_name:
+            tex_node.set_editor_property("group", "Metallic")
+        elif "Height" in param_name:
+            tex_node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
+            tex_node.set_editor_property("group", "Displacement")
+            unreal.log(f"🏔️ Environment Height texture sample: {param_name}")
+        
+        return tex_node
 
 # Convenience functions
 def create_orm_material():
@@ -896,21 +1031,16 @@ def create_split_material():
     builder = SubstrateMaterialBuilder()
     return builder.create_split_material()
 
-def create_advanced_material():
-    """Create basic Advanced material"""
-    builder = SubstrateMaterialBuilder()
-    return builder.create_advanced_material()
-
 def create_environment_material():
     """Create basic Environment material"""
     builder = SubstrateMaterialBuilder()
     return builder.create_environment_material()
 
-# Fixed config button functions that pass nanite parameter
-def create_environment_material_with_nanite(use_adv_env=False, use_triplanar=False, use_nanite=False):
-    """Create Environment material with all options"""
+# Config button functions with all new parameters
+def create_environment_material_with_options(use_adv_env=False, use_triplanar=False, use_nanite=False, use_tex_var=False):
+    """Create Environment material with all options including texture variation"""
     builder = SubstrateMaterialBuilder()
-    return builder.create_environment_material(use_adv_env=use_adv_env, use_triplanar=use_triplanar, use_nanite=use_nanite)
+    return builder.create_environment_material(use_adv_env=use_adv_env, use_triplanar=use_triplanar, use_nanite=use_nanite, use_tex_var=use_tex_var)
 
 if __name__ == "__main__":
     create_orm_material()

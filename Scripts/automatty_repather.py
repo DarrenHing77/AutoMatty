@@ -1,5 +1,5 @@
 """
-AutoMatty Texture Repather with Height Map Support - Smart texture replacement in material instances with universal plugin support
+AutoMatty Texture Repather with Texture Variation Support - Smart texture replacement in material instances
 """
 import unreal
 
@@ -16,7 +16,7 @@ except ImportError as e:
 
 def repath_material_instances():
     """
-    Repath textures in selected material instances to new folder with height map support
+    Repath textures in selected material instances to new folder with texture variation support
     Uses dialog to select target folder
     """
     
@@ -53,10 +53,14 @@ def repath_material_instances():
     
     unreal.log(f"🔍 Found {len(target_textures)} imported textures")
     
-    # Check for height maps in target textures
+    # Check for height maps and variation textures in target textures
     height_maps = [tex for tex in target_textures if _is_height_texture(tex.get_name())]
+    variation_maps = [tex for tex in target_textures if _is_variation_texture(tex.get_name())]
+    
     if height_maps:
         unreal.log(f"🏔️ Found {len(height_maps)} height/displacement maps in target textures")
+    if variation_maps:
+        unreal.log(f"🎲 Found {len(variation_maps)} potential variation maps in target textures")
     
     # 4) Remap each instance
     total_remapped = 0
@@ -73,8 +77,9 @@ def repath_material_instances():
         # Get texture parameter names from the parent material
         texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
         
-        # Check if material has height parameter
+        # Check if material has height parameter and variation parameter
         has_height_param = "Height" in texture_params
+        has_variation_param = "VariationHeightMap" in texture_params
         
         remapped_count = 0
         
@@ -86,7 +91,17 @@ def repath_material_instances():
                 
                 if new_texture:
                     unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
-                    param_emoji = "🏔️" if param_name == "Height" else "✅"
+                    
+                    # Enhanced emoji system
+                    if param_name == "Height":
+                        param_emoji = "🏔️"
+                    elif param_name == "VariationHeightMap":
+                        param_emoji = "🎲"
+                    elif param_name.endswith(('A', 'B')) or param_name == "BlendMask":
+                        param_emoji = "🌍"
+                    else:
+                        param_emoji = "✅"
+                    
                     unreal.log(f"  {param_emoji} {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
                     remapped_count += 1
                 else:
@@ -99,7 +114,7 @@ def repath_material_instances():
     unreal.log(f"🏆 Remapped {total_remapped} textures total")
 
 def find_best_match(current_texture, target_textures, param_name=None):
-    """Smart texture matching with multiple strategies including height map support"""
+    """Smart texture matching with multiple strategies including texture variation support"""
     import re
     current_name = current_texture.get_name().lower()
     
@@ -115,12 +130,17 @@ def find_best_match(current_texture, target_textures, param_name=None):
         if clean_target == clean_current:
             return tex
     
-    # 3. Type-based matching (Color → BaseColor, Height → Displacement, etc.)
+    # 3. Type-based matching (Color → BaseColor, Height → Displacement, VariationHeightMap, etc.)
     patterns = AutoMattyConfig.TEXTURE_PATTERNS
     
     # If we know the parameter name, prioritize that type
     if param_name:
         target_type = param_name
+        
+        # Special handling for VariationHeightMap - treat it like Height
+        if target_type == "VariationHeightMap":
+            target_type = "Height"
+        
         if target_type in patterns:
             pattern = patterns[target_type]
             for tex in target_textures:
@@ -144,7 +164,7 @@ def find_best_match(current_texture, target_textures, param_name=None):
 
 def repath_material_instances_from_folder():
     """
-    Alternative version - repath from existing folder instead of importing with height map support
+    Alternative version - repath from existing folder instead of importing with texture variation support
     """
     
     # 1) Validate selection
@@ -176,10 +196,14 @@ def repath_material_instances_from_folder():
     
     unreal.log(f"🔍 Found {len(target_textures)} textures in folder")
     
-    # Check for height maps
+    # Check for height maps and variation maps
     height_maps = [tex for tex in target_textures if _is_height_texture(tex.get_name())]
+    variation_maps = [tex for tex in target_textures if _is_variation_texture(tex.get_name())]
+    
     if height_maps:
         unreal.log(f"🏔️ Found {len(height_maps)} height/displacement maps")
+    if variation_maps:
+        unreal.log(f"🎲 Found {len(variation_maps)} potential variation maps")
     
     # 4) Remap each instance (same logic as main function)
     total_remapped = 0
@@ -204,7 +228,17 @@ def repath_material_instances_from_folder():
                 
                 if new_texture:
                     unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
-                    param_emoji = "🏔️" if param_name == "Height" else "✅"
+                    
+                    # Enhanced emoji system
+                    if param_name == "Height":
+                        param_emoji = "🏔️"
+                    elif param_name == "VariationHeightMap":
+                        param_emoji = "🎲"
+                    elif param_name.endswith(('A', 'B')) or param_name == "BlendMask":
+                        param_emoji = "🌍"
+                    else:
+                        param_emoji = "✅"
+                    
                     unreal.log(f"  {param_emoji} {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
                     remapped_count += 1
                 else:
@@ -218,7 +252,7 @@ def repath_material_instances_from_folder():
 
 def batch_repath_by_name_pattern():
     """
-    Advanced version - batch repath by matching name patterns with height map support
+    Advanced version - batch repath by matching name patterns with texture variation support
     """
     
     selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()
@@ -237,7 +271,7 @@ def batch_repath_by_name_pattern():
         # Extract base name from instance (remove _Inst suffix)
         instance_base = instance.get_name().replace("_Inst", "").replace("M_", "")
         
-        # Search for textures with matching base names (including height maps)
+        # Search for textures with matching base names (including height maps and variation)
         texture_search_patterns = [
             f"*{instance_base}*Color*",
             f"*{instance_base}*Normal*",
@@ -248,7 +282,9 @@ def batch_repath_by_name_pattern():
             f"*{instance_base}*Height*",
             f"*{instance_base}*Displacement*",
             f"*{instance_base}*Disp*",
-            f"*{instance_base}*Emission*"
+            f"*{instance_base}*Emission*",
+            f"*{instance_base}*Variation*",  # NEW - for texture variation
+            f"*{instance_base}*Var*",        # NEW - short form
         ]
         
         found_textures = []
@@ -268,10 +304,14 @@ def batch_repath_by_name_pattern():
         found_textures = list(set(found_textures))
         unreal.log(f"  🔍 Found {len(found_textures)} matching textures")
         
-        # Check for height maps
+        # Check for height maps and variation maps
         height_maps = [tex for tex in found_textures if _is_height_texture(tex.get_name())]
+        variation_maps = [tex for tex in found_textures if _is_variation_texture(tex.get_name())]
+        
         if height_maps:
             unreal.log(f"  🏔️ Including {len(height_maps)} height/displacement maps")
+        if variation_maps:
+            unreal.log(f"  🎲 Including {len(variation_maps)} variation maps")
         
         # Apply the matching logic
         parent_material = instance.get_editor_property('parent')
@@ -289,7 +329,17 @@ def batch_repath_by_name_pattern():
                 
                 if new_texture:
                     unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
-                    param_emoji = "🏔️" if param_name == "Height" else "✅"
+                    
+                    # Enhanced emoji system
+                    if param_name == "Height":
+                        param_emoji = "🏔️"
+                    elif param_name == "VariationHeightMap":
+                        param_emoji = "🎲"
+                    elif param_name.endswith(('A', 'B')) or param_name == "BlendMask":
+                        param_emoji = "🌍"
+                    else:
+                        param_emoji = "✅"
+                    
                     unreal.log(f"  {param_emoji} {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
                     remapped_count += 1
         
@@ -308,9 +358,31 @@ def _is_height_texture(texture_name):
         return height_pattern.search(texture_name.lower()) is not None
     return False
 
+def _is_variation_texture(texture_name):
+    """
+    Check if a texture name indicates it could be used for texture variation
+    NEW - for identifying variation height maps
+    """
+    import re
+    name_lower = texture_name.lower()
+    
+    # Look for explicit variation keywords
+    variation_keywords = ["variation", "var", "random", "noise"]
+    for keyword in variation_keywords:
+        if keyword in name_lower:
+            return True
+    
+    # Could also be a height map that's suitable for variation
+    height_pattern = AutoMattyConfig.TEXTURE_PATTERNS.get("Height")
+    if height_pattern and height_pattern.search(name_lower):
+        return True
+    
+    return False
+
 def repath_nanite_materials_only():
     """
     Specialized function to repath only materials that have nanite/height displacement support
+    Updated with texture variation support
     """
     
     selected_assets = unreal.EditorUtilityLibrary.get_selected_assets()
@@ -322,22 +394,31 @@ def repath_nanite_materials_only():
     
     # Filter to only nanite-enabled instances
     nanite_instances = []
+    variation_instances = []
+    
     for instance in instances:
         parent_material = instance.get_editor_property('parent')
         if parent_material:
             texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
+            
             if "Height" in texture_params:
                 nanite_instances.append(instance)
                 unreal.log(f"🏔️ Found nanite-enabled instance: {instance.get_name()}")
+            
+            if "VariationHeightMap" in texture_params:
+                variation_instances.append(instance)
+                unreal.log(f"🎲 Found texture-variation instance: {instance.get_name()}")
     
-    if not nanite_instances:
-        unreal.log_warning("⚠️ No nanite-enabled material instances found in selection")
+    target_instances = list(set(nanite_instances + variation_instances))  # Remove duplicates
+    
+    if not target_instances:
+        unreal.log_warning("⚠️ No nanite or texture-variation enabled material instances found in selection")
         return
     
-    unreal.log(f"🎯 Processing {len(nanite_instances)} nanite-enabled instances")
+    unreal.log(f"🎯 Processing {len(target_instances)} advanced instances")
     
     # Get target folder via import dialog
-    unreal.log("📁 Navigate to your new texture folder (must include height maps)...")
+    unreal.log("📁 Navigate to your new texture folder (must include height/variation maps)...")
     atools = unreal.AssetToolsHelpers.get_asset_tools()
     imported = atools.import_assets_with_dialog("/Game/Textures")
     
@@ -352,18 +433,21 @@ def repath_nanite_materials_only():
         unreal.log_error(f"❌ No textures in imported assets")
         return
     
-    # Check for height maps in targets
+    # Check for height maps and variation maps in targets
     height_maps = [tex for tex in target_textures if _is_height_texture(tex.get_name())]
-    if not height_maps:
-        unreal.log_warning("⚠️ No height/displacement maps found in target textures!")
+    variation_maps = [tex for tex in target_textures if _is_variation_texture(tex.get_name())]
+    
+    if not height_maps and not variation_maps:
+        unreal.log_warning("⚠️ No height/displacement or variation maps found in target textures!")
         return
     
     unreal.log(f"🏔️ Found {len(height_maps)} height maps in target textures")
+    unreal.log(f"🎲 Found {len(variation_maps)} variation maps in target textures")
     
-    # Remap nanite instances
+    # Remap advanced instances
     total_remapped = 0
-    for instance in nanite_instances:
-        unreal.log(f"🔧 Processing nanite instance: {instance.get_name()}...")
+    for instance in target_instances:
+        unreal.log(f"🔧 Processing advanced instance: {instance.get_name()}...")
         
         parent_material = instance.get_editor_property('parent')
         texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
@@ -378,7 +462,17 @@ def repath_nanite_materials_only():
                 
                 if new_texture:
                     unreal.MaterialEditingLibrary.set_material_instance_texture_parameter_value(instance, param_name, new_texture)
-                    param_emoji = "🏔️" if param_name == "Height" else "✅"
+                    
+                    # Enhanced emoji system
+                    if param_name == "Height":
+                        param_emoji = "🏔️"
+                    elif param_name == "VariationHeightMap":
+                        param_emoji = "🎲"
+                    elif param_name.endswith(('A', 'B')) or param_name == "BlendMask":
+                        param_emoji = "🌍"
+                    else:
+                        param_emoji = "✅"
+                    
                     unreal.log(f"  {param_emoji} {param_name}: {current_texture.get_name()} → {new_texture.get_name()}")
                     remapped_count += 1
         
@@ -386,7 +480,7 @@ def repath_nanite_materials_only():
             unreal.EditorAssetLibrary.save_asset(instance.get_path_name())
             total_remapped += remapped_count
     
-    unreal.log(f"🏆 Remapped {total_remapped} textures in nanite materials")
+    unreal.log(f"🏆 Remapped {total_remapped} textures in advanced materials")
 
 # Execute
 if __name__ == "__main__":
