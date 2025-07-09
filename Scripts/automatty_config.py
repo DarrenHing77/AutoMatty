@@ -370,9 +370,14 @@ def ui_set_custom_material_path(path_string):
         AutoMattyConfig.set_custom_material_path("")
         return True
     
-    # Clean up the path
+    # Clean up the path - handle content browser paths properly
     clean_path = path_string.strip()
-    if not clean_path.startswith("/Game/"):
+    
+    # Handle content browser paths that start with /All/Game/
+    if clean_path.startswith("/All/Game/"):
+        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
+    # Handle paths that don't start with /Game/
+    elif not clean_path.startswith("/Game/"):
         clean_path = f"/Game/{clean_path.lstrip('/')}"
     
     # Validate and set
@@ -381,6 +386,7 @@ def ui_set_custom_material_path(path_string):
         return True
     else:
         return False
+
 
 def ui_get_current_material_path():
     """Get current material path for UI display"""
@@ -393,9 +399,14 @@ def ui_set_custom_texture_path(path_string):
         AutoMattyConfig.set_custom_texture_path("")
         return True
     
-    # Clean up the path
+    # Clean up the path - handle content browser paths properly
     clean_path = path_string.strip()
-    if not clean_path.startswith("/Game/"):
+    
+    # Handle content browser paths that start with /All/Game/
+    if clean_path.startswith("/All/Game/"):
+        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
+    # Handle paths that don't start with /Game/
+    elif not clean_path.startswith("/Game/"):
         clean_path = f"/Game/{clean_path.lstrip('/')}"
     
     # Validate and set
