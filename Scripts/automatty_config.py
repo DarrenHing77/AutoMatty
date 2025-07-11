@@ -7,6 +7,53 @@ import os
 import sys
 import re
 
+def ensure_unreal_qt():
+    """Auto-install unreal_qt if missing"""
+    try:
+        import unreal_qt
+        return True
+    except ImportError:
+        unreal.log("📦 Installing unreal-qt dependency...")
+        
+        # Auto-install using UE's pip
+        import subprocess
+        import sys
+        import os
+        
+        # Get UE's Python executable
+        python_exe = sys.executable
+        
+        try:
+            # Install unreal-qt
+            result = subprocess.run([
+                python_exe, "-m", "pip", "install", "unreal-qt"
+            ], capture_output=True, text=True, check=True)
+            
+            unreal.log("✅ unreal-qt installed successfully!")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            unreal.log_error(f"❌ Failed to install unreal-qt: {e}")
+            unreal.log_error("💡 Manual install: Run this in cmd as admin:")
+            unreal.log_error(f'   cd "{os.path.dirname(python_exe)}"')
+            unreal.log_error(f'   python.exe -m pip install unreal-qt')
+            return False
+
+def show_material_editor():
+    """Show material editor with auto-dependency check"""
+    if not ensure_unreal_qt():
+        return
+    
+    # Import and run the editor
+    try:
+        import importlib
+        import automatty_material_instance_editor
+        importlib.reload(automatty_material_instance_editor)
+        automatty_material_instance_editor.show_editor_for_selection()
+    except Exception as e:
+        unreal.log_error(f"❌ Material editor failed: {e}")
+
+
 # Setup AutoMatty path - do this first before any other imports
 def setup_automatty_path():
     """Ensure AutoMatty scripts path is available"""
@@ -36,6 +83,30 @@ try:
     setup_automatty_imports()
 except ImportError as e:
     unreal.log_error(f"❌ Failed to import automatty_utils: {e}")
+
+
+## RELOAD AND SHOWING INSTANCE EDITOR
+
+def reload_material_editor():
+    """Hot-reload the material editor without restarting UE"""
+    import importlib
+    try:
+        import automatty_material_instance_editor
+        importlib.reload(automatty_material_instance_editor)
+        unreal.log("🔄 Material editor reloaded!")
+        return automatty_material_instance_editor
+    except Exception as e:
+        unreal.log_error(f"❌ Reload failed: {e}")
+        return None
+
+def show_material_editor():
+    """Show the material editor with current selection"""
+    editor_module = reload_material_editor()
+    if editor_module:
+        editor_module.show_editor_for_selection()
+
+
+
 
 class AutoMattyConfig:
     """Centralized config for AutoMatty plugin with UI integration"""
