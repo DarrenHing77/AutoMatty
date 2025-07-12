@@ -963,3 +963,305 @@ def repath_material_instances():
         
     except Exception as e:
         unreal.log_error(f"❌ Error repathing materials: {e}")
+
+
+
+
+# ===========================================
+# PROPER MENU ENTRY SCRIPT APPROACH
+# ===========================================
+
+@unreal.uclass()
+class AutoMattyMenuScript(unreal.ToolMenuEntryScript):
+    """Menu script for AutoMatty Material Editor"""
+    
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        """Execute when menu item is clicked or hotkey pressed"""
+        try:
+            import automatty_material_instance_editor
+            automatty_material_instance_editor.show_editor_for_selection()
+            unreal.log("🎯 AutoMatty Material Editor opened via menu/hotkey!")
+        except Exception as e:
+            unreal.log_error(f"❌ Failed to open AutoMatty editor: {e}")
+
+class AutoMattyHotkeys:
+    """Hotkey management using proper menu registration"""
+    
+    DEFAULT_HOTKEY = "M"
+    _menu_script = None
+    _widget_script = None  # NEW - for main widget
+    
+    @staticmethod
+    def get_hotkey_from_config():
+        """Get hotkey from config"""
+        config_file = AutoMattyConfig._get_config_file_path()
+        try:
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    import json
+                    config_data = json.load(f)
+                    return config_data.get('hotkey', AutoMattyHotkeys.DEFAULT_HOTKEY)
+        except:
+            pass
+        return AutoMattyHotkeys.DEFAULT_HOTKEY
+    
+    @staticmethod
+    def set_hotkey_in_config(hotkey):
+        """Save hotkey to config"""
+        config_file = AutoMattyConfig._get_config_file_path()
+        try:
+            os.makedirs(os.path.dirname(config_file), exist_ok=True)
+            
+            config_data = {}
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    import json
+                    config_data = json.load(f)
+            
+            config_data['hotkey'] = hotkey.upper()
+            
+            with open(config_file, 'w') as f:
+                import json
+                json.dump(config_data, f, indent=2)
+            
+            unreal.log(f"⌨️ Hotkey saved: {hotkey}")
+            return True
+        except Exception as e:
+            unreal.log_error(f"❌ Failed to save hotkey: {e}")
+            return False
+
+# ===========================================
+# ADDITIONAL MENU SCRIPTS
+# ===========================================
+
+@unreal.uclass()
+class AutoMattyWidgetScript(unreal.ToolMenuEntryScript):
+    """Menu script for main AutoMatty EUW widget"""
+    
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        """Execute when menu item is clicked or hotkey pressed"""
+        try:
+            # Open the main AutoMatty widget
+            subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
+            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
+            
+            if blueprint:
+                widget = subsystem.spawn_and_register_tab(blueprint)
+                if widget:
+                    unreal.log("🎯 AutoMatty main widget opened via menu/hotkey!")
+                else:
+                    unreal.log_error("❌ Failed to spawn AutoMatty widget")
+            else:
+                unreal.log_error("❌ Could not load EUW_AutoMatty blueprint")
+                
+        except Exception as e:
+            unreal.log_error(f"❌ Failed to open AutoMatty widget: {e}")
+
+# ===========================================
+# MENU REGISTRATION 
+# ===========================================
+
+def register_automatty_menu_entry():
+    """Register BOTH AutoMatty menu entries that can be bound to hotkeys"""
+    try:
+        # Get the Tools menu
+        menus = unreal.ToolMenus.get()
+        tools_menu = menus.find_menu("LevelEditor.MainMenu.Tools")
+        
+        if not tools_menu:
+            unreal.log_error("❌ Could not find Tools menu")
+            return False
+        
+        # 1. MAIN WIDGET ENTRY
+        widget_script = AutoMattyWidgetScript()
+        widget_script.init_entry(
+            owner_name="AutoMatty",
+            menu="LevelEditor.MainMenu.Tools", 
+            section="LevelEditorModules",
+            name="AutoMattyWidget",
+            label="AutoMatty",
+            tool_tip="Open AutoMatty main widget"
+        )
+        widget_script.register_menu_entry()
+        
+        # 2. MATERIAL EDITOR ENTRY  
+        editor_script = AutoMattyMenuScript()
+        editor_script.init_entry(
+            owner_name="AutoMatty",
+            menu="LevelEditor.MainMenu.Tools", 
+            section="LevelEditorModules", 
+            name="AutoMattyMaterialEditor",
+            label="AutoMatty Material Editor",
+            tool_tip="Open AutoMatty Material Instance Editor"
+        )
+        editor_script.register_menu_entry()
+        
+        # Refresh menus
+        menus.refresh_all_widgets()
+        
+        # Store references to prevent garbage collection
+        AutoMattyHotkeys._menu_script = editor_script
+        AutoMattyHotkeys._widget_script = widget_script
+        
+        unreal.log("✅ AutoMatty menu entries registered!")
+        unreal.log("📋 Available in Tools menu:")
+        unreal.log("   • AutoMatty (main widget)")
+        unreal.log("   • AutoMatty Material Editor")
+        unreal.log("📋 To set hotkeys:")
+        unreal.log("1. Edit → Editor Preferences → Keyboard Shortcuts")
+        unreal.log("2. Search 'AutoMatty' to find both commands")
+        unreal.log("3. Set hotkeys (suggest: A for widget, M for editor)")
+        
+        return True
+        
+    except Exception as e:
+        unreal.log_error(f"❌ Menu registration failed: {e}")
+        return False
+
+def unregister_automatty_menu():
+    """Unregister AutoMatty menu entries"""
+    try:
+        menus = unreal.ToolMenus.get()
+        menus.unregister_owner_by_name("AutoMatty")
+        menus.refresh_all_widgets()
+        AutoMattyHotkeys._menu_script = None
+        AutoMattyHotkeys._widget_script = None  # Clear both references
+        unreal.log("🗑️ AutoMatty menu entries unregistered")
+        return True
+    except Exception as e:
+        unreal.log_error(f"❌ Menu unregistration failed: {e}")
+        return False
+
+# ===========================================
+# ALTERNATIVE: CONSOLE COMMAND BACKUP
+# ===========================================
+
+def register_console_command():
+    """Register console command as backup"""
+    try:
+        # Note: Console command registration in Python is limited
+        # This is mainly for testing
+        unreal.log("🎮 Console command fallback available")
+        unreal.log("💡 Type in console: py automatty_config.open_editor_command()")
+        return True
+    except Exception as e:
+        unreal.log_error(f"❌ Console command setup failed: {e}")
+        return False
+
+# ===========================================
+# UI FUNCTIONS
+# ===========================================
+
+def ui_get_current_hotkey():
+    """Get current hotkey for UI"""
+    return AutoMattyHotkeys.get_hotkey_from_config()
+
+def ui_set_hotkey(hotkey_string):
+    """Set new hotkey"""
+    clean_hotkey = hotkey_string.strip().upper()
+    
+    if not clean_hotkey:
+        clean_hotkey = AutoMattyHotkeys.DEFAULT_HOTKEY
+    
+    if len(clean_hotkey) != 1 or not clean_hotkey.isalpha():
+        unreal.log_error(f"❌ Invalid hotkey: {clean_hotkey}. Use A-Z")
+        return False
+    
+    success = AutoMattyHotkeys.set_hotkey_in_config(clean_hotkey)
+    if success:
+        unreal.log(f"⌨️ Hotkey preference set to: {clean_hotkey}")
+        unreal.log("💡 You still need to manually bind it in Editor Preferences")
+        show_hotkey_instructions()
+    
+    return success
+
+def show_hotkey_instructions():
+    """Show instructions for manual hotkey setup"""
+    hotkey = AutoMattyHotkeys.get_hotkey_from_config()
+    unreal.log("📋 HOTKEY SETUP INSTRUCTIONS:")
+    unreal.log("1. Edit → Editor Preferences → Keyboard Shortcuts")
+    unreal.log("2. Search 'AutoMatty' to find both commands:")
+    unreal.log("   • AutoMatty (main widget)")
+    unreal.log("   • AutoMatty Material Editor")
+    unreal.log("3. Click text field and set hotkeys")
+    unreal.log("   💡 Suggestion: A for widget, M for editor")
+    unreal.log("4. Click elsewhere to save")
+
+def setup_hotkey_system():
+    """Main setup function"""
+    hotkey = AutoMattyHotkeys.get_hotkey_from_config()
+    unreal.log(f"🔧 Setting up AutoMatty menu entry (hotkey: {hotkey})")
+    
+    # Register menu entry (this is what gets bound to hotkeys)
+    if register_automatty_menu_entry():
+        register_console_command()  # Backup method
+        return True
+    else:
+        unreal.log_error("❌ Failed to setup menu entry")
+        return False
+
+def test_editor_directly():
+    """Test opening editor without hotkey"""
+    try:
+        import automatty_material_instance_editor
+        automatty_material_instance_editor.show_editor_for_selection()
+        unreal.log("✅ Direct editor test worked!")
+        return True
+    except Exception as e:
+        unreal.log_error(f"❌ Direct test failed: {e}")
+        return False
+
+def open_editor_command():
+    """Simple function to open editor (for console/manual use)"""
+    test_editor_directly()
+
+def reload_menu_system():
+    """Reload menu system for development"""
+    unregister_automatty_menu()
+    return setup_hotkey_system()
+
+# ===========================================
+# ENHANCED WIDGET INTEGRATION
+# ===========================================
+
+def apply_all_settings_with_hotkey():
+    """Enhanced apply function that includes hotkey"""
+    widget = get_widget()
+    if not widget:
+        unreal.log_error("❌ No widget found")
+        return
+    
+    try:
+        # Apply existing settings
+        apply_all_settings()
+        
+        # Apply hotkey if field exists
+        try:
+            hotkey_input = widget.get_editor_property('HotkeyInput')
+            if hotkey_input:
+                hotkey = str(hotkey_input.get_text()).strip()
+                if hotkey:
+                    ui_set_hotkey(hotkey)
+        except:
+            pass  # Hotkey field doesn't exist yet
+            
+    except Exception as e:
+        unreal.log_error(f"❌ Settings with hotkey failed: {e}")
+
+def load_current_settings_with_hotkey():
+    """Enhanced load function that includes hotkey"""
+    load_current_settings()
+    
+    widget = get_widget()
+    if widget:
+        try:
+            hotkey_input = widget.get_editor_property('HotkeyInput')
+            if hotkey_input:
+                hotkey_input.set_text(ui_get_current_hotkey())
+        except:
+            pass  # Hotkey field doesn't exist yet
+
+# Auto-setup on import
+setup_hotkey_system()

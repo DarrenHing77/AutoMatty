@@ -1,6 +1,6 @@
 """
-AutoMatty Material Instance Editor - Complete Version with Master Material Protection
-Modern Qt-based material parameter editor with conflict detection and smart ranges
+AutoMatty Material Instance Editor - FIXED VERSION
+Fixes rendering artifacts and adds resizable columns
 """
 
 import unreal_qt
@@ -192,42 +192,87 @@ class ParameterSlider(QWidget):
         self.is_dragging = False
         self.last_mouse_pos = None
         
+        # Use a splitter for resizable columns
+        self.splitter = QSplitter(Qt.Horizontal)
+        
+        # Create main layout
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.addWidget(self.splitter)
         
-        # Parameter name label
+        # Parameter name widget (with minimum width and text eliding)
+        name_widget = QWidget()
+        name_layout = QHBoxLayout(name_widget)
+        name_layout.setContentsMargins(5, 0, 5, 0)
+        
         self.label = QLabel(param_name)
-        self.label.setMinimumWidth(100)
+        self.label.setMinimumWidth(80)
+        self.label.setMaximumWidth(200)
         self.label.setObjectName("ParamLabel")
+        self.label.setToolTip(param_name)  # Show full name on hover
+        # Enable text eliding for long names
+        self.label.setWordWrap(False)
+        self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         
-        # Custom slider with modifier key support
+        name_layout.addWidget(self.label)
+        name_layout.addStretch()
+        
+        # Slider widget
+        slider_widget = QWidget()
+        slider_layout = QHBoxLayout(slider_widget)
+        slider_layout.setContentsMargins(5, 0, 5, 0)
+        
         self.slider = ModifierAwareSlider(Qt.Horizontal)
         self.slider.setMinimum(int(min_val * 1000))
         self.slider.setMaximum(int(max_val * 1000))
         self.slider.setValue(int(current_val * 1000))
         self.slider.valueChanged.connect(self.on_slider_changed)
+        self.slider.setMinimumWidth(100)
         
-        # Value display/input with lower default step
+        slider_layout.addWidget(self.slider)
+        
+        # Value input widget
+        value_widget = QWidget()
+        value_layout = QHBoxLayout(value_widget)
+        value_layout.setContentsMargins(5, 0, 5, 0)
+        
         self.value_input = ModifierAwareSpinBox()
         self.value_input.setMinimum(min_val)
         self.value_input.setMaximum(max_val)
         self.value_input.setValue(current_val)
         self.value_input.setDecimals(3)
-        self.value_input.setSingleStep(0.001)  # Finer default step
-        self.value_input.setMaximumWidth(70)
+        self.value_input.setSingleStep(0.001)
+        self.value_input.setFixedWidth(80)
         self.value_input.valueChanged.connect(self.on_input_changed)
         
-        # Reset button
+        value_layout.addWidget(self.value_input)
+        
+        # Reset button widget
+        reset_widget = QWidget()
+        reset_layout = QHBoxLayout(reset_widget)
+        reset_layout.setContentsMargins(5, 0, 5, 0)
+        
         self.reset_btn = QPushButton("↺")
-        self.reset_btn.setMaximumWidth(25)
+        self.reset_btn.setFixedWidth(30)
         self.reset_btn.setObjectName("ResetButton")
         self.reset_btn.clicked.connect(lambda: self.set_value(self.default_val))
         
-        layout.addWidget(self.label)
-        layout.addWidget(self.slider, 1)
-        layout.addWidget(self.value_input)
-        layout.addWidget(self.reset_btn)
+        reset_layout.addWidget(self.reset_btn)
+        
+        # Add widgets to splitter
+        self.splitter.addWidget(name_widget)
+        self.splitter.addWidget(slider_widget)
+        self.splitter.addWidget(value_widget)
+        self.splitter.addWidget(reset_widget)
+        
+        # Set splitter proportions: name gets more space, others fixed-ish
+        self.splitter.setStretchFactor(0, 3)  # Name column - expandable
+        self.splitter.setStretchFactor(1, 4)  # Slider column - most space
+        self.splitter.setStretchFactor(2, 1)  # Value column - fixed-ish
+        self.splitter.setStretchFactor(3, 0)  # Reset column - fixed
+        
+        # Set initial sizes
+        self.splitter.setSizes([120, 200, 80, 30])
         
         # Add tooltip with modifier key info
         tooltip_text = (f"{param_name}\n\n"
@@ -357,7 +402,8 @@ class MaterialInstanceEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Material Instance Editor")
-        self.setFixedSize(380, 650)
+        self.setMinimumSize(420, 500)  # Set minimum size instead of fixed
+        self.resize(500, 700)  # Default size, but resizable
         
         # Data
         self.current_materials = []
@@ -367,27 +413,15 @@ class MaterialInstanceEditor(QWidget):
         self.is_master_material = False
         self.master_warnings_disabled = set()
         
-        # Make it frameless and add rounded corners
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # Remove transparency and frameless flags to fix rendering issues
+        self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
         
         self.init_ui()
         self.apply_styles()
         
-        # Make it draggable
-        self.drag_position = None
-        
     def init_ui(self):
-        # Main container with rounded background
-        self.container = QWidget()
-        self.container.setObjectName("MainContainer")
-        
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.addWidget(self.container)
-        
-        # Container layout
-        layout = QVBoxLayout(self.container)
+        # Main layout - no need for container widget now
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
         
@@ -587,8 +621,8 @@ class MaterialInstanceEditor(QWidget):
         if not hasattr(self, 'master_warning_label'):
             self.master_warning_label = QLabel("⚠️ EDITING MASTER MATERIAL - AFFECTS ALL INSTANCES")
             self.master_warning_label.setObjectName("MasterWarning")
-            # Insert after dropdown
-            self.container.layout().insertWidget(2, self.master_warning_label)
+            # Insert after dropdown in main layout
+            self.layout().insertWidget(2, self.master_warning_label)
 
     def hide_master_material_warning(self):
         """Hide master material warning"""
@@ -927,9 +961,13 @@ class MaterialInstanceEditor(QWidget):
     
     def apply_styles(self):
         self.setStyleSheet("""
-            #MainContainer {
+            QWidget {
                 background-color: #2b2b2b;
-                border-radius: 10px;
+                color: #ffffff;
+            }
+            
+            QMainWindow, QDialog {
+                background-color: #2b2b2b;
                 border: 1px solid #3c3c3c;
             }
             
@@ -1006,6 +1044,7 @@ class MaterialInstanceEditor(QWidget):
                 color: #cccccc;
                 font-size: 10px;
                 font-weight: bold;
+                padding: 2px;
             }
             
             #RGBLabel {
@@ -1021,6 +1060,16 @@ class MaterialInstanceEditor(QWidget):
                 background-color: #333333;
                 border-radius: 2px;
                 margin: 1px;
+            }
+            
+            QSplitter::handle {
+                background-color: #555555;
+                width: 2px;
+                margin: 2px;
+            }
+            
+            QSplitter::handle:hover {
+                background-color: #0078d4;
             }
             
             QSlider::groove:horizontal {
@@ -1097,37 +1146,6 @@ class MaterialInstanceEditor(QWidget):
                 background-color: #666666;
             }
         """)
-    
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            try:
-                # New Qt6 way
-                self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            except AttributeError:
-                # Fallback for older Qt
-                self.drag_position = event.globalPos() - self.frameGeometry().topLeft()
-            event.accept()
-    
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.LeftButton and self.drag_position:
-            try:
-                # New Qt6 way
-                self.move(event.globalPosition().toPoint() - self.drag_position)
-            except AttributeError:
-                # Fallback for older Qt
-                self.move(event.globalPos() - self.drag_position)
-            event.accept()
-    
-    def paintEvent(self, event):
-        # Draw rounded background with shadow effect
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Shadow
-        shadow_rect = self.rect().adjusted(2, 2, 2, 2)
-        painter.fillRect(shadow_rect, QColor(0, 0, 0, 50))
-        
-        super().paintEvent(event)
 
 # ========================================
 # UE INTEGRATION FUNCTIONS
