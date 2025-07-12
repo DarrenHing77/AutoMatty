@@ -375,7 +375,7 @@ class SubstrateMaterialBuilder:
         
         metal_intensity = self.lib.create_material_expression(material, unreal.MaterialExpressionScalarParameter, -1100, -600)
         metal_intensity.set_editor_property("parameter_name", "MetalIntensity")
-        metal_intensity.set_editor_property("default_value", 1.0)
+        metal_intensity.set_editor_property("default_value", 0.0)
         metal_intensity.set_editor_property("group", "Metallic")
         
         metal_final = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -700, -550)
