@@ -668,66 +668,116 @@ class MaterialInstanceEditor(QWidget):
 # ========================================
 # UE INTEGRATION FUNCTIONS - FIXED
 # ========================================
+# =================================================
+# REPLACE THESE FUNCTIONS IN automatty_material_instance_editor.py
+# =================================================
 
 def get_selected_mesh_materials():
-    """Get all material instances from selected mesh in viewport - FIXED: Use new API"""
-    # Use new API instead of deprecated one
+    """Get ALL materials (both instances and masters) from selected mesh"""
     editor_actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
     selected_actors = editor_actor_subsystem.get_selected_level_actors()
     
     material_instances = []
     
     for actor in selected_actors:
-        # Check if it's a static mesh or skeletal mesh
         if isinstance(actor, (unreal.StaticMeshActor, unreal.SkeletalMeshActor)):
             mesh_component = None
             
             if isinstance(actor, unreal.StaticMeshActor):
                 mesh_component = actor.get_component_by_class(unreal.StaticMeshComponent)
-            else:  # SkeletalMeshActor
+            else:
                 mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
             
             if mesh_component:
-                # Get all materials on this mesh
                 num_materials = mesh_component.get_num_materials()
                 
                 for i in range(num_materials):
                     material = mesh_component.get_material(i)
-                    if isinstance(material, unreal.MaterialInstanceConstant):
+                    
+                    # Accept both Materials and Material Instances
+                    if isinstance(material, (unreal.MaterialInstanceConstant, unreal.Material)):
+                        material_type = "Master" if isinstance(material, unreal.Material) else "Instance"
+                        
                         material_instances.append({
                             'name': material.get_name(),
                             'instance': material,
                             'slot': i,
-                            'actor': actor.get_name()
+                            'actor': actor.get_name(),
+                            'type': material_type
                         })
     
     return material_instances
 
 def show_editor_for_selection():
-    """Show editor with materials from selected mesh"""
+    """Enhanced version with user-friendly error handling"""
     global material_editor_widget
     
     materials = get_selected_mesh_materials()
     
     if not materials:
-        unreal.log_warning("⚠️ No material instances found on selected mesh")
-        unreal.log("💡 Select a Static Mesh or Skeletal Mesh actor in the viewport")
-        return
-    
-    # Close existing widget if it exists
-    if material_editor_widget:
+        # Check if any actors selected at all
+        editor_actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+        selected_actors = editor_actor_subsystem.get_selected_level_actors()
+        
+        if not selected_actors:
+            try:
+                from automatty_config import show_error_dialog
+                show_error_dialog(
+                    "No Selection", 
+                    "Please select a Static Mesh or Skeletal Mesh in the viewport.",
+                    "Select a mesh actor first, then try again."
+                )
+            except:
+                unreal.log_error("❌ No selection. Select a mesh actor in the viewport.")
+            return
+        
+        # Check if selected actors have materials (but not instances)
         try:
-            material_editor_widget.close()
-            material_editor_widget.deleteLater()
-        except:
-            pass
+            from automatty_config import check_for_regular_materials, show_material_selection_dialog, show_help_dialog
+            regular_materials = check_for_regular_materials(selected_actors)
+            
+            if regular_materials:
+                result = show_material_selection_dialog()
+                
+                if result == "help":
+                    show_help_dialog()
+                    return
+                elif result == "cancel":
+                    return
+                # If "create", continue - we'll support regular materials now
+            else:
+                try:
+                    from automatty_config import show_error_dialog
+                    show_error_dialog(
+                        "No Materials Found",
+                        "The selected mesh doesn't have any materials assigned.",
+                        "Assign some materials to the mesh first."
+                    )
+                except:
+                    unreal.log_error("❌ No materials found on selected mesh.")
+                return
+        except ImportError:
+            # Fallback if config functions not available
+            unreal.log_warning("⚠️ No material instances found on selected mesh")
+            unreal.log("💡 Select a Static Mesh or Skeletal Mesh actor in the viewport")
+            return
     
-    # Create new editor
-    material_editor_widget = MaterialInstanceEditor()
-    material_editor_widget.load_materials(materials)
-    material_editor_widget.show()
-    
-    unreal.log(f"🎉 Material Editor opened with {len(materials)} instances")
+    # Proceed with editor if we have materials
+    if materials:
+        # Close existing widget
+        if material_editor_widget:
+            try:
+                material_editor_widget.close()
+                material_editor_widget.deleteLater()
+            except:
+                pass
+        
+        # Create new editor
+        material_editor_widget = MaterialInstanceEditor()
+        material_editor_widget.load_materials(materials)
+        material_editor_widget.show()
+        
+        unreal.log(f"🎉 Material Editor opened with {len(materials)} materials")
 
 def reload_material_editor():
     """Hot-reload the material editor without restarting UE"""
