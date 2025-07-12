@@ -1,6 +1,6 @@
 """
-AutoMatty Material Instance Editor - Complete Integration (FIXED)
-Modern Qt-based material parameter editor with real-time UE integration
+AutoMatty Material Instance Editor - Complete Version with Master Material Protection
+Modern Qt-based material parameter editor with conflict detection and smart ranges
 """
 
 import unreal_qt
@@ -13,6 +13,133 @@ from PySide6.QtGui import *
 
 # Global widget reference for hot reloading
 material_editor_widget = None
+
+class ModifierAwareSlider(QSlider):
+    """Custom slider that respects modifier keys for fine/coarse control"""
+    
+    def __init__(self, orientation, parent=None):
+        super().__init__(orientation, parent)
+        self.base_step = 1  # Base step size
+        self.fine_step = 0.1  # Shift modifier (fine)
+        self.coarse_step = 10  # Ctrl modifier (coarse)
+        
+    def wheelEvent(self, event):
+        """Handle mouse wheel with modifier support"""
+        modifiers = QApplication.keyboardModifiers()
+        
+        # Determine step size based on modifiers
+        if modifiers & Qt.ShiftModifier:
+            step = self.fine_step
+        elif modifiers & Qt.ControlModifier:
+            step = self.coarse_step
+        else:
+            step = self.base_step
+        
+        # Get wheel direction
+        delta = event.angleDelta().y()
+        if delta > 0:
+            new_value = self.value() + step
+        else:
+            new_value = self.value() - step
+        
+        # Clamp to range
+        new_value = max(self.minimum(), min(self.maximum(), new_value))
+        self.setValue(int(new_value))
+        
+        event.accept()
+    
+    def mousePressEvent(self, event):
+        """Track mouse press for drag detection"""
+        if event.button() == Qt.LeftButton:
+            self.start_value = self.value()
+            self.start_pos = event.pos()
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse drag with modifier-aware sensitivity"""
+        if event.buttons() & Qt.LeftButton:
+            modifiers = QApplication.keyboardModifiers()
+            
+            # Calculate sensitivity based on modifiers
+            if modifiers & Qt.ShiftModifier:
+                sensitivity = 0.2  # 5x slower
+            elif modifiers & Qt.ControlModifier:
+                sensitivity = 5.0   # 5x faster
+            else:
+                sensitivity = 1.0   # Normal speed
+            
+            # Calculate movement
+            if hasattr(self, 'start_pos'):
+                delta_x = event.pos().x() - self.start_pos.x()
+                value_range = self.maximum() - self.minimum()
+                slider_width = self.width()
+                
+                if slider_width > 0:
+                    # Convert pixel movement to value change
+                    value_delta = (delta_x / slider_width) * value_range * sensitivity
+                    new_value = self.start_value + value_delta
+                    
+                    # Clamp to range
+                    new_value = max(self.minimum(), min(self.maximum(), new_value))
+                    self.setValue(int(new_value))
+        
+        # Don't call super() to prevent default behavior when using modifiers
+        if not (QApplication.keyboardModifiers() & (Qt.ShiftModifier | Qt.ControlModifier)):
+            super().mouseMoveEvent(event)
+
+class ModifierAwareSpinBox(QDoubleSpinBox):
+    """Custom spinbox with modifier key support"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.base_step = 0.001
+        self.fine_step = 0.0001  # 10x finer
+        self.coarse_step = 0.01   # 10x coarser
+        
+    def wheelEvent(self, event):
+        """Handle mouse wheel with modifier support"""
+        modifiers = QApplication.keyboardModifiers()
+        
+        # Store original step
+        original_step = self.singleStep()
+        
+        # Set step based on modifiers
+        if modifiers & Qt.ShiftModifier:
+            self.setSingleStep(self.fine_step)
+        elif modifiers & Qt.ControlModifier:
+            self.setSingleStep(self.coarse_step)
+        else:
+            self.setSingleStep(self.base_step)
+        
+        # Call parent wheel event
+        super().wheelEvent(event)
+        
+        # Restore original step
+        self.setSingleStep(original_step)
+    
+    def keyPressEvent(self, event):
+        """Handle arrow keys with modifiers"""
+        if event.key() in (Qt.Key_Up, Qt.Key_Down):
+            modifiers = QApplication.keyboardModifiers()
+            
+            # Store original step
+            original_step = self.singleStep()
+            
+            # Set step based on modifiers
+            if modifiers & Qt.ShiftModifier:
+                self.setSingleStep(self.fine_step)
+            elif modifiers & Qt.ControlModifier:
+                self.setSingleStep(self.coarse_step)
+            else:
+                self.setSingleStep(self.base_step)
+            
+            # Call parent key event
+            super().keyPressEvent(event)
+            
+            # Restore original step
+            self.setSingleStep(original_step)
+        else:
+            super().keyPressEvent(event)
 
 class CollapsibleSection(QWidget):
     def __init__(self, title, parent=None):
@@ -59,6 +186,11 @@ class ParameterSlider(QWidget):
         super().__init__(parent)
         self.param_name = param_name
         self.default_val = current_val
+        self.original_value = current_val  # Store for conflict resolution
+        self.min_val = min_val
+        self.max_val = max_val
+        self.is_dragging = False
+        self.last_mouse_pos = None
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -69,20 +201,20 @@ class ParameterSlider(QWidget):
         self.label.setMinimumWidth(100)
         self.label.setObjectName("ParamLabel")
         
-        # Slider
-        self.slider = QSlider(Qt.Horizontal)
+        # Custom slider with modifier key support
+        self.slider = ModifierAwareSlider(Qt.Horizontal)
         self.slider.setMinimum(int(min_val * 1000))
         self.slider.setMaximum(int(max_val * 1000))
         self.slider.setValue(int(current_val * 1000))
         self.slider.valueChanged.connect(self.on_slider_changed)
         
-        # Value display/input
-        self.value_input = QDoubleSpinBox()
+        # Value display/input with lower default step
+        self.value_input = ModifierAwareSpinBox()
         self.value_input.setMinimum(min_val)
         self.value_input.setMaximum(max_val)
         self.value_input.setValue(current_val)
         self.value_input.setDecimals(3)
-        self.value_input.setSingleStep(0.01)
+        self.value_input.setSingleStep(0.001)  # Finer default step
         self.value_input.setMaximumWidth(70)
         self.value_input.valueChanged.connect(self.on_input_changed)
         
@@ -96,6 +228,16 @@ class ParameterSlider(QWidget):
         layout.addWidget(self.slider, 1)
         layout.addWidget(self.value_input)
         layout.addWidget(self.reset_btn)
+        
+        # Add tooltip with modifier key info
+        tooltip_text = (f"{param_name}\n\n"
+                       "💡 Modifier Keys:\n"
+                       "• Normal: Regular speed\n" 
+                       "• Shift: Fine control (5x slower)\n"
+                       "• Ctrl: Coarse control (5x faster)\n\n"
+                       "Works with: Mouse drag, wheel, arrow keys")
+        self.slider.setToolTip(tooltip_text)
+        self.value_input.setToolTip(tooltip_text)
         
     def on_slider_changed(self, value):
         float_val = value / 1000.0
@@ -113,6 +255,38 @@ class ParameterSlider(QWidget):
     def set_value(self, value):
         self.slider.setValue(int(value * 1000))
         self.value_input.setValue(value)
+        
+    def reset_to_original(self):
+        """Reset to the value when parameter was first loaded"""
+        self.set_value(self.original_value)
+    
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts for fine control"""
+        if event.key() in (Qt.Key_Left, Qt.Key_Right):
+            modifiers = QApplication.keyboardModifiers()
+            
+            # Determine step size
+            if modifiers & Qt.ShiftModifier:
+                step = 0.1  # Fine
+            elif modifiers & Qt.ControlModifier:
+                step = 10.0  # Coarse
+            else:
+                step = 1.0   # Normal
+            
+            # Apply step
+            current = self.slider.value()
+            if event.key() == Qt.Key_Right:
+                new_value = current + step
+            else:
+                new_value = current - step
+            
+            # Clamp and set
+            new_value = max(self.slider.minimum(), min(self.slider.maximum(), new_value))
+            self.slider.setValue(int(new_value))
+            
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
 class ColorPicker(QWidget):
     color_changed = Signal(str, QColor)
@@ -124,8 +298,10 @@ class ColorPicker(QWidget):
         # Convert UE LinearColor to QColor if provided
         if current_color and hasattr(current_color, 'r'):
             self.current_color = QColor.fromRgbF(current_color.r, current_color.g, current_color.b, current_color.a)
+            self.original_color = QColor.fromRgbF(current_color.r, current_color.g, current_color.b, current_color.a)
         else:
             self.current_color = current_color or QColor(128, 128, 128)
+            self.original_color = QColor(self.current_color)
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -170,6 +346,12 @@ class ColorPicker(QWidget):
             self.current_color = color
             self.update_color_button()
             self.color_changed.emit(self.param_name, color)
+            
+    def reset_to_original(self):
+        """Reset to original color"""
+        self.current_color = QColor(self.original_color)
+        self.update_color_button()
+        self.color_changed.emit(self.param_name, self.current_color)
 
 class MaterialInstanceEditor(QWidget):
     def __init__(self, parent=None):
@@ -182,6 +364,8 @@ class MaterialInstanceEditor(QWidget):
         self.current_instance = None
         self.parameter_widgets = {}
         self.sections = {}
+        self.is_master_material = False
+        self.master_warnings_disabled = set()
         
         # Make it frameless and add rounded corners
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -263,6 +447,154 @@ class MaterialInstanceEditor(QWidget):
         layout.addWidget(scroll, 1)
         layout.addLayout(button_layout)
         
+    def get_smart_parameter_range(self, param_name):
+        """Get appropriate min/max values based on parameter type"""
+        param_lower = param_name.lower()
+        
+        # UV Scale and tiling parameters - much higher range
+        if any(word in param_lower for word in ['scale', 'tiling', 'uvscale', 'tile']):
+            return 0.01, 100.0
+            
+        # Displacement intensity - moderate range
+        elif any(word in param_lower for word in ['displacement', 'height', 'disp']):
+            return 0.0, 10.0
+            
+        # Brightness and contrast - moderate range
+        elif any(word in param_lower for word in ['brightness', 'contrast']):
+            return 0.0, 5.0
+            
+        # Roughness, metallic, intensity - standard 0-1 range
+        elif any(word in param_lower for word in ['roughness', 'metallic', 'intensity', 'weight']):
+            return 0.0, 1.0
+            
+        # Mix, blend parameters - standard 0-1 range
+        elif any(word in param_lower for word in ['mix', 'blend', 'alpha']):
+            return 0.0, 1.0
+            
+        # Hue shift - -1 to 1 range
+        elif 'hue' in param_lower:
+            return -1.0, 1.0
+            
+        # Default range for unknown parameters
+        else:
+            return 0.0, 2.0
+    
+    def show_master_material_confirmation(self, param_name, new_value):
+        """Show confirmation before changing master material"""
+        msg = QMessageBox()
+        msg.setWindowTitle("AutoMatty - Master Material Warning")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setText(f"Change '{param_name}' in Master Material?")
+        msg.setInformativeText(
+            f"This will change '{param_name}' to {new_value} in the MASTER material.\n\n"
+            "⚠️ This affects ALL objects using this material in your project!\n\n"
+            "Consider creating a Material Instance instead for safer editing."
+        )
+        
+        # Add "Don't ask again" checkbox
+        dont_ask_checkbox = QCheckBox("Don't warn me again for this material")
+        msg.setCheckBox(dont_ask_checkbox)
+        
+        # Custom buttons
+        create_instance_btn = msg.addButton("Create Instance Instead", QMessageBox.AcceptRole)
+        proceed_btn = msg.addButton("Proceed (Master)", QMessageBox.DestructiveRole)
+        cancel_btn = msg.addButton("Cancel", QMessageBox.RejectRole)
+        
+        msg.exec_()
+        
+        result = {
+            'action': 'cancel',
+            'dont_ask': dont_ask_checkbox.isChecked()
+        }
+        
+        if msg.clickedButton() == create_instance_btn:
+            result['action'] = 'create_instance'
+        elif msg.clickedButton() == proceed_btn:
+            result['action'] = 'proceed'
+        
+        return result
+    
+    def show_conflict_warning(self, param_name, conflict_type):
+        """Show conflict warnings for incompatible parameter changes"""
+        msg = QMessageBox()
+        msg.setWindowTitle("AutoMatty - Parameter Conflict")
+        msg.setIcon(QMessageBox.Warning)
+        
+        if conflict_type == "triplanar_uv":
+            msg.setText("Triplanar vs UV Conflict")
+            msg.setInformativeText(
+                f"'{param_name}' conflicts with triplanar mapping!\n\n"
+                "Triplanar materials use world-space coordinates and ignore UV scaling.\n"
+                "This parameter won't have any visible effect.\n\n"
+                "💡 Use either triplanar OR UV controls, not both."
+            )
+        elif conflict_type == "texture_variation_manual":
+            msg.setText("Texture Variation Conflict") 
+            msg.setInformativeText(
+                f"'{param_name}' may conflict with texture variation!\n\n"
+                "Texture variation automatically modifies UVs for randomness.\n"
+                "Manual UV adjustments might interfere with the variation effect.\n\n"
+                "💡 Disable texture variation if you need precise UV control."
+            )
+        
+        proceed_btn = msg.addButton("Proceed Anyway", QMessageBox.AcceptRole)
+        cancel_btn = msg.addButton("Cancel Change", QMessageBox.RejectRole)
+        
+        msg.exec_()
+        
+        return msg.clickedButton() == proceed_btn
+    
+    def detect_parameter_conflicts(self, param_name):
+        """Detect potential conflicts with current parameter"""
+        if not self.current_instance:
+            return None
+            
+        param_lower = param_name.lower()
+        
+        # Get parent material to check for triplanar/variation setup
+        parent_material = None
+        if self.is_master_material:
+            parent_material = self.current_instance
+        else:
+            parent_material = self.current_instance.get_editor_property('parent')
+        
+        if not parent_material:
+            return None
+            
+        # Check material for triplanar indicators (world-aligned functions)
+        # This is a simplified check - in practice you'd analyze the material graph
+        material_name = parent_material.get_name().lower()
+        
+        # UV scale conflicts with triplanar
+        if any(word in param_lower for word in ['scale', 'tiling', 'uvscale']):
+            if 'triplanar' in material_name or 'worldaligned' in material_name:
+                return "triplanar_uv"
+                
+        # UV adjustments might conflict with texture variation
+        if any(word in param_lower for word in ['scale', 'tiling', 'uvscale', 'offset']):
+            # Check if material has variation parameters
+            try:
+                texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
+                if "VariationHeightMap" in texture_params:
+                    return "texture_variation_manual"
+            except:
+                pass
+                
+        return None
+    
+    def show_master_material_warning(self):
+        """Show persistent warning for master materials"""
+        if not hasattr(self, 'master_warning_label'):
+            self.master_warning_label = QLabel("⚠️ EDITING MASTER MATERIAL - AFFECTS ALL INSTANCES")
+            self.master_warning_label.setObjectName("MasterWarning")
+            # Insert after dropdown
+            self.container.layout().insertWidget(2, self.master_warning_label)
+
+    def hide_master_material_warning(self):
+        """Hide master material warning"""
+        if hasattr(self, 'master_warning_label'):
+            self.master_warning_label.hide()
+    
     def load_materials(self, material_list):
         """Load materials from selected mesh into dropdown"""
         self.current_materials = material_list
@@ -270,7 +602,8 @@ class MaterialInstanceEditor(QWidget):
         # Update dropdown
         self.material_dropdown.clear()
         for mat_info in material_list:
-            display_name = f"{mat_info['actor']} - {mat_info['name']} (Slot {mat_info['slot']})"
+            mat_type = mat_info.get('type', 'Unknown')
+            display_name = f"{mat_info['actor']} - {mat_info['name']} ({mat_type}) (Slot {mat_info['slot']})"
             self.material_dropdown.addItem(display_name, mat_info)
         
         # Load first material if available
@@ -285,16 +618,27 @@ class MaterialInstanceEditor(QWidget):
             self.load_material_instance(material_info['instance'])
     
     def load_material_instance(self, instance):
-        """Dynamically create UI for this specific material instance"""
+        """Load material with master/instance detection"""
         self.current_instance = instance
         
-        unreal.log(f"🔧 Loading parameters for: {instance.get_name()}")
+        # Check if this is a master material
+        self.is_master_material = isinstance(instance, unreal.Material)
+        
+        if self.is_master_material:
+            self.show_master_material_warning()
+            unreal.log(f"⚠️ Loading MASTER material: {instance.get_name()}")
+        else:
+            self.hide_master_material_warning()
+            unreal.log(f"🔧 Loading material instance: {instance.get_name()}")
         
         # Clear existing parameter widgets
         self.clear_all_parameters()
         
         # Get all parameter types from the parent material
-        parent_material = instance.get_editor_property('parent')
+        parent_material = instance
+        if not self.is_master_material:
+            parent_material = instance.get_editor_property('parent')
+        
         if not parent_material:
             unreal.log_warning("⚠️ No parent material found")
             return
@@ -314,11 +658,18 @@ class MaterialInstanceEditor(QWidget):
                     section = CollapsibleSection(group_name)
                     self.sections[group_name] = section
                     
-                    # Add scalar parameters
+                    # Add scalar parameters with smart ranges
                     for param_name in params['scalars']:
                         try:
-                            current_value = unreal.MaterialEditingLibrary.get_material_instance_scalar_parameter_value(instance, param_name)
-                            slider = ParameterSlider(str(param_name), 0.0, 2.0, current_value)
+                            if self.is_master_material:
+                                current_value = unreal.MaterialEditingLibrary.get_material_scalar_parameter_value(instance, param_name)
+                            else:
+                                current_value = unreal.MaterialEditingLibrary.get_material_instance_scalar_parameter_value(instance, param_name)
+                            
+                            # Get smart range for this parameter
+                            min_val, max_val = self.get_smart_parameter_range(str(param_name))
+                            
+                            slider = ParameterSlider(str(param_name), min_val, max_val, current_value)
                             slider.value_changed.connect(self.on_scalar_parameter_changed)
                             section.add_widget(slider)
                             self.parameter_widgets[str(param_name)] = slider
@@ -328,7 +679,11 @@ class MaterialInstanceEditor(QWidget):
                     # Add vector parameters
                     for param_name in params['vectors']:
                         try:
-                            current_value = unreal.MaterialEditingLibrary.get_material_instance_vector_parameter_value(instance, param_name)
+                            if self.is_master_material:
+                                current_value = unreal.MaterialEditingLibrary.get_material_vector_parameter_value(instance, param_name)
+                            else:
+                                current_value = unreal.MaterialEditingLibrary.get_material_instance_vector_parameter_value(instance, param_name)
+                            
                             color_picker = ColorPicker(str(param_name), current_value)
                             color_picker.color_changed.connect(self.on_vector_parameter_changed)
                             section.add_widget(color_picker)
@@ -339,7 +694,11 @@ class MaterialInstanceEditor(QWidget):
                     # Add texture parameters (just show names for now)
                     for param_name in params['textures']:
                         try:
-                            current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, param_name)
+                            if self.is_master_material:
+                                current_texture = unreal.MaterialEditingLibrary.get_material_texture_parameter_value(instance, param_name)
+                            else:
+                                current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, param_name)
+                            
                             texture_name = current_texture.get_name() if current_texture else "None"
                             texture_label = QLabel(f"{str(param_name)}: {texture_name}")
                             texture_label.setObjectName("TextureLabel")
@@ -350,7 +709,8 @@ class MaterialInstanceEditor(QWidget):
                     # Add section to layout
                     self.params_layout.insertWidget(self.params_layout.count() - 1, section)
             
-            unreal.log(f"✅ Loaded {len(scalar_params)} scalar, {len(vector_params)} vector, {len(texture_params)} texture parameters")
+            param_count = len(scalar_params) + len(vector_params) + len(texture_params)
+            unreal.log(f"✅ Loaded {param_count} parameters ({len(scalar_params)} scalar, {len(vector_params)} vector, {len(texture_params)} texture)")
             
         except Exception as e:
             unreal.log_error(f"❌ Failed to load material parameters: {e}")
@@ -368,7 +728,7 @@ class MaterialInstanceEditor(QWidget):
             "Other": {"scalars": [], "vectors": [], "textures": []}
         }
         
-        # Categorize scalar parameters - FIXED: Convert Name to string
+        # Categorize scalar parameters
         for param in scalar_params:
             param_lower = str(param).lower()
             if any(word in param_lower for word in ['color', 'brightness', 'contrast', 'hue']):
@@ -388,7 +748,7 @@ class MaterialInstanceEditor(QWidget):
             else:
                 groups["Other"]["scalars"].append(param)
         
-        # Categorize vector parameters - FIXED: Convert Name to string
+        # Categorize vector parameters
         for param in vector_params:
             param_lower = str(param).lower()
             if any(word in param_lower for word in ['color', 'tint']):
@@ -396,7 +756,7 @@ class MaterialInstanceEditor(QWidget):
             else:
                 groups["Other"]["vectors"].append(param)
         
-        # Categorize texture parameters - FIXED: Convert Name to string
+        # Categorize texture parameters
         for param in texture_params:
             param_lower = str(param).lower()
             if any(word in param_lower for word in ['color', 'albedo', 'diffuse']):
@@ -432,16 +792,102 @@ class MaterialInstanceEditor(QWidget):
                 child.widget().deleteLater()
     
     def on_scalar_parameter_changed(self, param_name, value):
-        """Update scalar parameter in material instance"""
-        if self.current_instance:
-            try:
+        """Handle parameter changes with master material protection and conflict detection"""
+        if not self.current_instance:
+            return
+        
+        # Check for parameter conflicts first
+        conflict_type = self.detect_parameter_conflicts(param_name)
+        if conflict_type:
+            if not self.show_conflict_warning(param_name, conflict_type):
+                # User cancelled - reset parameter
+                widget = self.parameter_widgets.get(param_name)
+                if widget and isinstance(widget, ParameterSlider):
+                    widget.reset_to_original()
+                return
+        
+        # Check if this is a master material and we need confirmation
+        if self.is_master_material:
+            material_name = self.current_instance.get_name()
+            if material_name not in self.master_warnings_disabled:
+                
+                result = self.show_master_material_confirmation(param_name, value)
+                
+                if result['action'] == 'cancel':
+                    # Reset the slider/input to previous value
+                    widget = self.parameter_widgets.get(param_name)
+                    if widget and isinstance(widget, ParameterSlider):
+                        widget.reset_to_original()
+                    return
+                
+                elif result['action'] == 'create_instance':
+                    # Auto-create instance and switch to it
+                    self.create_instance_from_master()
+                    return
+                
+                # Remember "don't ask" preference
+                if result['dont_ask']:
+                    self.master_warnings_disabled.add(material_name)
+        
+        # Proceed with the change
+        self.apply_parameter_change(param_name, value)
+
+    def apply_parameter_change(self, param_name, value):
+        """Apply parameter change with proper API"""
+        try:
+            if self.is_master_material:
+                # Use Material API (affects master)
+                unreal.MaterialEditingLibrary.set_material_scalar_parameter_value(
+                    self.current_instance, param_name, value
+                )
+                # Force recompilation for master materials
+                unreal.MaterialEditingLibrary.recompile_material(self.current_instance)
+                unreal.log(f"🔄 Updated master material parameter: {param_name} = {value}")
+            else:
+                # Use Material Instance API (instance only)
                 unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(
                     self.current_instance, param_name, value
                 )
-                # Force update
                 unreal.MaterialEditingLibrary.update_material_instance(self.current_instance)
-            except Exception as e:
-                unreal.log_warning(f"⚠️ Failed to set scalar parameter {param_name}: {e}")
+            
+        except Exception as e:
+            unreal.log_warning(f"⚠️ Failed to set parameter {param_name}: {e}")
+
+    def create_instance_from_master(self):
+        """Auto-create material instance from master material"""
+        try:
+            base_material = self.current_instance
+            
+            # Generate unique name
+            mi_name = f"MI_{base_material.get_name()}_Auto"
+            mi_path = "/Game/Materials/"
+            
+            # Create the instance
+            atools = unreal.AssetToolsHelpers.get_asset_tools()
+            mi_factory = unreal.MaterialInstanceConstantFactoryNew()
+            
+            new_instance = atools.create_asset(
+                mi_name, mi_path, unreal.MaterialInstanceConstant, mi_factory
+            )
+            
+            # Set parent
+            unreal.MaterialEditingLibrary.set_material_instance_parent(new_instance, base_material)
+            
+            # Switch editor to the new instance
+            self.current_instance = new_instance
+            self.is_master_material = False
+            self.hide_master_material_warning()
+            
+            # Reload the interface for the new instance
+            self.load_material_instance(new_instance)
+            
+            unreal.log(f"✅ Created material instance: {mi_name}")
+            
+            return new_instance
+            
+        except Exception as e:
+            unreal.log_error(f"❌ Failed to create instance: {e}")
+            return None
     
     def on_vector_parameter_changed(self, param_name, qcolor):
         """Update vector parameter in material instance"""
@@ -449,11 +895,17 @@ class MaterialInstanceEditor(QWidget):
             try:
                 # Convert QColor to UE LinearColor
                 linear_color = unreal.LinearColor(qcolor.redF(), qcolor.greenF(), qcolor.blueF(), qcolor.alphaF())
-                unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(
-                    self.current_instance, param_name, linear_color
-                )
-                # Force update
-                unreal.MaterialEditingLibrary.update_material_instance(self.current_instance)
+                
+                if self.is_master_material:
+                    unreal.MaterialEditingLibrary.set_material_vector_parameter_value(
+                        self.current_instance, param_name, linear_color
+                    )
+                    unreal.MaterialEditingLibrary.recompile_material(self.current_instance)
+                else:
+                    unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(
+                        self.current_instance, param_name, linear_color
+                    )
+                    unreal.MaterialEditingLibrary.update_material_instance(self.current_instance)
             except Exception as e:
                 unreal.log_warning(f"⚠️ Failed to set vector parameter {param_name}: {e}")
     
@@ -466,10 +918,12 @@ class MaterialInstanceEditor(QWidget):
             unreal.log_warning("⚠️ No material instances found on selected mesh")
     
     def reset_all_parameters(self):
-        """Reset all parameters to their default values"""
+        """Reset all parameters to their original values"""
         for widget in self.parameter_widgets.values():
             if isinstance(widget, ParameterSlider):
-                widget.set_value(widget.default_val)
+                widget.reset_to_original()
+            elif isinstance(widget, ColorPicker):
+                widget.reset_to_original()
     
     def apply_styles(self):
         self.setStyleSheet("""
@@ -484,6 +938,16 @@ class MaterialInstanceEditor(QWidget):
                 font-weight: bold;
                 color: #ffffff;
                 margin-bottom: 5px;
+            }
+            
+            #MasterWarning {
+                background-color: #ff4444;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: bold;
+                text-align: center;
+                margin: 5px 0;
             }
             
             #MaterialDropdown {
@@ -666,11 +1130,8 @@ class MaterialInstanceEditor(QWidget):
         super().paintEvent(event)
 
 # ========================================
-# UE INTEGRATION FUNCTIONS - FIXED
+# UE INTEGRATION FUNCTIONS
 # ========================================
-# =================================================
-# REPLACE THESE FUNCTIONS IN automatty_material_instance_editor.py
-# =================================================
 
 def get_selected_mesh_materials():
     """Get ALL materials (both instances and masters) from selected mesh"""
@@ -709,75 +1170,38 @@ def get_selected_mesh_materials():
     return material_instances
 
 def show_editor_for_selection():
-    """Enhanced version with user-friendly error handling"""
+    """Show editor with enhanced error handling"""
     global material_editor_widget
     
     materials = get_selected_mesh_materials()
     
     if not materials:
-        # Check if any actors selected at all
+        # Enhanced error handling with helpful messages
         editor_actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
         selected_actors = editor_actor_subsystem.get_selected_level_actors()
         
         if not selected_actors:
-            try:
-                from automatty_config import show_error_dialog
-                show_error_dialog(
-                    "No Selection", 
-                    "Please select a Static Mesh or Skeletal Mesh in the viewport.",
-                    "Select a mesh actor first, then try again."
-                )
-            except:
-                unreal.log_error("❌ No selection. Select a mesh actor in the viewport.")
+            unreal.log_error("❌ No actors selected. Select a mesh in the viewport first.")
             return
         
-        # Check if selected actors have materials (but not instances)
-        try:
-            from automatty_config import check_for_regular_materials, show_material_selection_dialog, show_help_dialog
-            regular_materials = check_for_regular_materials(selected_actors)
-            
-            if regular_materials:
-                result = show_material_selection_dialog()
-                
-                if result == "help":
-                    show_help_dialog()
-                    return
-                elif result == "cancel":
-                    return
-                # If "create", continue - we'll support regular materials now
-            else:
-                try:
-                    from automatty_config import show_error_dialog
-                    show_error_dialog(
-                        "No Materials Found",
-                        "The selected mesh doesn't have any materials assigned.",
-                        "Assign some materials to the mesh first."
-                    )
-                except:
-                    unreal.log_error("❌ No materials found on selected mesh.")
-                return
-        except ImportError:
-            # Fallback if config functions not available
-            unreal.log_warning("⚠️ No material instances found on selected mesh")
-            unreal.log("💡 Select a Static Mesh or Skeletal Mesh actor in the viewport")
-            return
+        unreal.log_warning("⚠️ Selected actors don't have any materials.")
+        unreal.log("💡 Make sure your mesh has materials assigned before using the editor.")
+        return
     
-    # Proceed with editor if we have materials
-    if materials:
-        # Close existing widget
-        if material_editor_widget:
-            try:
-                material_editor_widget.close()
-                material_editor_widget.deleteLater()
-            except:
-                pass
-        
-        # Create new editor
-        material_editor_widget = MaterialInstanceEditor()
-        material_editor_widget.load_materials(materials)
-        material_editor_widget.show()
-        
-        unreal.log(f"🎉 Material Editor opened with {len(materials)} materials")
+    # Close existing widget
+    if material_editor_widget:
+        try:
+            material_editor_widget.close()
+            material_editor_widget.deleteLater()
+        except:
+            pass
+    
+    # Create new editor
+    material_editor_widget = MaterialInstanceEditor()
+    material_editor_widget.load_materials(materials)
+    material_editor_widget.show()
+    
+    unreal.log(f"🎉 Material Editor opened with {len(materials)} materials")
 
 def reload_material_editor():
     """Hot-reload the material editor without restarting UE"""
