@@ -38,20 +38,211 @@ def ensure_unreal_qt():
             unreal.log_error(f'   cd "{os.path.dirname(python_exe)}"')
             unreal.log_error(f'   python.exe -m pip install unreal-qt')
             return False
+# =================================================
+# ADD THESE FUNCTIONS TO automatty_config.py
+# =================================================
+
+def show_error_dialog(title, message, details=None):
+    """Show user-friendly error dialog"""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+        
+        msg = QMessageBox()
+        msg.setWindowTitle(f"AutoMatty - {title}")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setText(message)
+        
+        if details:
+            msg.setInformativeText(details)
+        
+        msg.exec_()
+    except:
+        # Fallback to console if Qt fails
+        unreal.log_error(f"❌ {title}: {message}")
+        if details:
+            unreal.log_error(f"   {details}")
+
+def show_success_dialog(title, message, details=None):
+    """Show success notification"""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+        
+        msg = QMessageBox()
+        msg.setWindowTitle(f"AutoMatty - {title}")
+        msg.setIcon(QMessageBox.Information)
+        msg.setText(message)
+        
+        if details:
+            msg.setInformativeText(details)
+        
+        msg.exec_()
+    except:
+        unreal.log(f"✅ {title}: {message}")
+
+def show_material_selection_dialog():
+    """Show dialog when no material instances found"""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+        
+        msg = QMessageBox()
+        msg.setWindowTitle("AutoMatty Material Editor")
+        msg.setIcon(QMessageBox.Information)
+        msg.setText("No Material Instances Found")
+        msg.setInformativeText(
+            "The selected mesh has regular Materials, but the editor works best with Material Instances.\n\n"
+            "Would you like to create Material Instances from the existing materials?"
+        )
+        
+        create_btn = msg.addButton("Create Instances", QMessageBox.AcceptRole)
+        cancel_btn = msg.addButton("Cancel", QMessageBox.RejectRole)
+        help_btn = msg.addButton("What's the difference?", QMessageBox.HelpRole)
+        
+        msg.exec_()
+        
+        if msg.clickedButton() == create_btn:
+            return "create"
+        elif msg.clickedButton() == help_btn:
+            return "help"
+        else:
+            return "cancel"
+    except:
+        unreal.log_warning("⚠️ No Material Instances found. Select mesh with Material Instances.")
+        return "cancel"
+
+def show_help_dialog():
+    """Explain Materials vs Material Instances"""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+        
+        msg = QMessageBox()
+        msg.setWindowTitle("Materials vs Material Instances")
+        msg.setIcon(QMessageBox.Information)
+        msg.setText("What's the difference?")
+        msg.setInformativeText(
+            "• Materials: Master templates (changes affect everything using them)\n"
+            "• Material Instances: Editable copies with parameters\n\n"
+            "The Material Editor can edit both, but Material Instances are safer "
+            "because changes only affect that specific instance."
+        )
+        msg.exec_()
+    except:
+        unreal.log("💡 Materials = master templates, Material Instances = safe copies to edit")
+
+def check_for_regular_materials(selected_actors):
+    """Check if actors have regular materials (not instances)"""
+    regular_materials = []
+    
+    for actor in selected_actors:
+        if isinstance(actor, (unreal.StaticMeshActor, unreal.SkeletalMeshActor)):
+            mesh_component = None
+            
+            if isinstance(actor, unreal.StaticMeshActor):
+                mesh_component = actor.get_component_by_class(unreal.StaticMeshComponent)
+            else:
+                mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
+            
+            if mesh_component:
+                num_materials = mesh_component.get_num_materials()
+                
+                for i in range(num_materials):
+                    material = mesh_component.get_material(i)
+                    if isinstance(material, unreal.Material):  # Regular material, not instance
+                        regular_materials.append({
+                            'name': material.get_name(),
+                            'instance': material,
+                            'slot': i,
+                            'actor': actor.get_name()
+                        })
+    
+    return regular_materials
+
+def validate_material_options(checkboxes):
+    """Validate material creation options for conflicts"""
+    conflicts = []
+    
+    # Check triplanar + custom UV conflicts
+    if checkboxes.get('use_triplanar') and checkboxes.get('use_custom_uvs'):
+        conflicts.append({
+            'type': 'triplanar_uv',
+            'message': 'Triplanar mapping and custom UVs cannot be used together',
+            'solution': 'Choose either Triplanar OR custom UVs, not both'
+        })
+    
+    # Add more validations as needed...
+    
+    return conflicts
+
+def show_conflict_dialog(conflicts):
+    """Show material creation conflicts"""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+        
+        msg = QMessageBox()
+        msg.setWindowTitle("AutoMatty - Material Creation Issues")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setText("Material creation has conflicts:")
+        
+        conflict_text = "\n\n".join([
+            f"• {c['message']}\n  → {c['solution']}" 
+            for c in conflicts
+        ])
+        
+        msg.setInformativeText(conflict_text)
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()
+    except:
+        for conflict in conflicts:
+            unreal.log_error(f"❌ {conflict['message']}")
+            unreal.log_error(f"   → {conflict['solution']}")
 
 def show_material_editor():
-    """Show material editor with auto-dependency check"""
-    if not ensure_unreal_qt():
-        return
-    
-    # Import and run the editor
+    """Enhanced show material editor with error handling"""
     try:
-        import importlib
+        # Setup unreal-qt if needed
+        import unreal_qt
+        unreal_qt.setup()
+        
+        # Import and show the editor with enhanced error handling
         import automatty_material_instance_editor
-        importlib.reload(automatty_material_instance_editor)
         automatty_material_instance_editor.show_editor_for_selection()
+        
+    except ImportError:
+        show_error_dialog(
+            "Missing Dependency", 
+            "unreal-qt is required for the Material Editor.",
+            "Install it with: pip install unreal-qt"
+        )
     except Exception as e:
-        unreal.log_error(f"❌ Material editor failed: {e}")
+        show_error_dialog("Material Editor Error", f"Failed to open editor: {e}")
+
+def debug_selected_materials():
+    """Debug function to see what materials are on selected mesh"""
+    editor_actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    selected_actors = editor_actor_subsystem.get_selected_level_actors()
+    
+    unreal.log(f"🔍 Found {len(selected_actors)} selected actors")
+    
+    for actor in selected_actors:
+        unreal.log(f"  Actor: {actor.get_name()} ({type(actor).__name__})")
+        
+        if isinstance(actor, (unreal.StaticMeshActor, unreal.SkeletalMeshActor)):
+            if isinstance(actor, unreal.StaticMeshActor):
+                mesh_component = actor.get_component_by_class(unreal.StaticMeshComponent)
+            else:
+                mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
+            
+            if mesh_component:
+                num_materials = mesh_component.get_num_materials()
+                unreal.log(f"    Materials: {num_materials}")
+                
+                for i in range(num_materials):
+                    material = mesh_component.get_material(i)
+                    if material:
+                        mat_type = type(material).__name__
+                        unreal.log(f"      Slot {i}: {material.get_name()} ({mat_type})")
+                    else:
+                        unreal.log(f"      Slot {i}: None")
+
 
 
 # Setup AutoMatty path - do this first before any other imports
