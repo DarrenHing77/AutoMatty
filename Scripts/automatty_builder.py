@@ -3,7 +3,8 @@ AutoMatty Material Builder - Complete Version with Texture Variation & UV Scale 
 """
 import unreal
 
-# Setup AutoMatty imports
+ #Setup AutoMatty imports
+
 try:
     from automatty_utils import setup_automatty_imports
     if not setup_automatty_imports():

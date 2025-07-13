@@ -1239,17 +1239,3 @@ def show_material_editor():
     if editor_module:
         editor_module.show_editor_for_selection()
 
-# Quick test function
-def test_editor():
-    """Test the editor UI (standalone)"""
-    global material_editor_widget
-    
-    if material_editor_widget:
-        try:
-            material_editor_widget.close()
-        except:
-            pass
-    
-    material_editor_widget = MaterialInstanceEditor()
-    material_editor_widget.show()
-    unreal.log("🧪 Test editor shown (no materials loaded)")
