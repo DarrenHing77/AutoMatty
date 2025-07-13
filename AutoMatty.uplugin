@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "AutoMatty",
-	"Description": "Material Utilities",
+	"Description": "Material Utilities with automatic Python initialization",
 	"Category": "Editor",
 	"CreatedBy": "Darren Hing",
 	"CreatedByURL": "",
@@ -13,5 +13,15 @@
 	"CanContainContent": true,
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
-	"Installed": false
+	"Installed": false,
+	"Plugins": [
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		}
+	]
 }

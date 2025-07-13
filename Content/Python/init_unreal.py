@@ -13,8 +13,10 @@ class AutoMattyMaterialEditor(unreal.ToolMenuEntryScript):
     def execute(self, context):
         """Execute when menu item is clicked"""
         try:
-            # Import here to avoid circular imports
+            # Simple import - no path discovery needed!
             import automatty_material_instance_editor
+            import importlib
+            importlib.reload(automatty_material_instance_editor)
             automatty_material_instance_editor.show_editor_for_selection()
             unreal.log("🎯 AutoMatty Material Editor opened!")
         except Exception as e:
