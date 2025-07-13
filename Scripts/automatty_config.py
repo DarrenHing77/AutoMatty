@@ -1,11 +1,366 @@
 """
-AutoMatty Configuration and Utilities - COMPLETE VERSION
-All features except menu registration (that goes in init_unreal.py)
+AutoMatty Configuration - REFACTORED VERSION
+Dictionary-driven config management, no more copy-paste hell
 """
 import unreal
 import os
 import sys
 import re
+import json
+
+# ========================================
+# CONFIGURATION DICTIONARIES
+# ========================================
+
+# Settings configuration - drives all the UI/storage logic
+SETTINGS_CONFIG = {
+    "material_path": {
+        "default": "/Game/Materials/AutoMatty",
+        "widget_property": "MaterialPathInput",
+        "description": "📁 Material Path",
+        "validation": "path"
+    },
+    "texture_path": {
+        "default": "/Game/Textures/AutoMatty", 
+        "widget_property": "TexturePathInput",
+        "description": "🖼️ Texture Path",
+        "validation": "path"
+    },
+    "material_prefix": {
+        "default": "M_AutoMatty",
+        "widget_property": "MaterialPrefixInput", 
+        "description": "🏷️ Material Prefix",
+        "validation": "name"
+    },
+    "hotkey": {
+        "default": "M",
+        "widget_property": "HotkeyInput",
+        "description": "⌨️ Hotkey",
+        "validation": "hotkey"
+    }
+}
+
+# Button actions configuration - drives all the create_* functions
+BUTTON_ACTIONS = {
+    "create_orm": {
+        "module": "automatty_builder",
+        "class": "SubstrateMaterialBuilder",
+        "method": "create_orm_material",
+        "description": "🔧 Creating ORM Material",
+        "success_msg": "🎉 SUCCESS! Created ORM material",
+        "get_features": True
+    },
+    "create_split": {
+        "module": "automatty_builder", 
+        "class": "SubstrateMaterialBuilder",
+        "method": "create_split_material",
+        "description": "🔧 Creating Split Material",
+        "success_msg": "🎉 SUCCESS! Created Split material", 
+        "get_features": True
+    },
+    "create_environment": {
+        "module": "automatty_builder",
+        "class": "SubstrateMaterialBuilder", 
+        "method": "create_environment_material",
+        "description": "🔧 Creating Environment Material",
+        "success_msg": "🎉 SUCCESS! Created Environment material",
+        "get_features": True
+    },
+    "create_instance": {
+        "module": "automatty_instancer",
+        "function": "create_material_instance", 
+        "description": "🔧 Creating Smart Material Instance",
+        "success_msg": "🎉 SUCCESS! Created material instance",
+        "get_features": False
+    },
+    "repath_instances": {
+        "module": "automatty_repather",
+        "function": "repath_material_instances",
+        "description": "🔧 Repathing Material Instances", 
+        "success_msg": "🏆 Texture repathing completed",
+        "get_features": False
+    }
+}
+
+# Feature checkboxes configuration
+FEATURE_CHECKBOXES = {
+    "use_nanite": "UseNanite",
+    "use_second_roughness": "UseSecondRoughness", 
+    "use_adv_env": "UseAdvEnv",
+    "use_triplanar": "UseTriplanar",
+    "use_tex_var": "UseTexVar"
+}
+
+# Validation patterns
+VALIDATORS = {
+    "path": lambda x: x.startswith("/Game/") if x else True,
+    "name": lambda x: bool(x and re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', x)),
+    "hotkey": lambda x: len(x) == 1 and x.isalpha() if x else True
+}
+
+# Texture matching patterns (moved from old config)
+TEXTURE_PATTERNS = {
+    "ORM": re.compile(r"(?:^|[_\W])orm(?:$|[_\W])|occlusion[-_]?roughness[-_]?metal(?:lic|ness)", re.IGNORECASE),
+    "Color": re.compile(r"(colou?r|albedo|base[-_]?color|diffuse)", re.IGNORECASE),
+    "Normal": re.compile(r"normal", re.IGNORECASE),
+    "Occlusion": re.compile(r"(?:^|[_\W])(?:ao|occlusion)(?:$|[_\W])", re.IGNORECASE),
+    "Roughness": re.compile(r"roughness", re.IGNORECASE),
+    "Metallic": re.compile(r"metal(?:lic|ness)", re.IGNORECASE),
+    "Height": re.compile(r"(?:^|[_\W])(?:height|disp|displacement)(?:$|[_\W])", re.IGNORECASE),
+    "Emission": re.compile(r"(?:^|[_\W])(?:emission|emissive|glow)(?:$|[_\W])", re.IGNORECASE),
+    "BlendMask": re.compile(r"(?:^|[_\W])(?:blend|mask|mix)(?:$|[_\W])", re.IGNORECASE),
+}
+
+# ========================================
+# CORE CONFIG CLASS
+# ========================================
+
+class AutoMattyConfig:
+    """Clean, dictionary-driven configuration management"""
+    
+    @staticmethod
+    def get_config_path():
+        """Get config file path"""
+        proj_dir = unreal.Paths.project_dir()
+        config_dir = os.path.join(proj_dir, "Saved", "Config", "AutoMatty")
+        return os.path.join(config_dir, "automatty_config.json")
+    
+    @staticmethod
+    def load_config():
+        """Load entire config as dict"""
+        config_path = AutoMattyConfig.get_config_path()
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            unreal.log_warning(f"⚠️ Failed to load config: {e}")
+        return {}
+    
+    @staticmethod
+    def save_config(config_data):
+        """Save entire config dict"""
+        config_path = AutoMattyConfig.get_config_path()
+        try:
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, 'w') as f:
+                json.dump(config_data, f, indent=2)
+            return True
+        except Exception as e:
+            unreal.log_error(f"❌ Failed to save config: {e}")
+            return False
+    
+    @staticmethod
+    def get_setting(setting_key):
+        """Get single setting with default fallback"""
+        config = AutoMattyConfig.load_config()
+        setting_config = SETTINGS_CONFIG.get(setting_key, {})
+        return config.get(setting_key, setting_config.get("default", ""))
+    
+    @staticmethod
+    def set_setting(setting_key, value):
+        """Set single setting"""
+        if setting_key not in SETTINGS_CONFIG:
+            unreal.log_error(f"❌ Unknown setting: {setting_key}")
+            return False
+        
+        # Validate
+        setting_config = SETTINGS_CONFIG[setting_key]
+        validator = VALIDATORS.get(setting_config.get("validation"))
+        if validator and not validator(value):
+            unreal.log_error(f"❌ Invalid {setting_key}: {value}")
+            return False
+        
+        # Save
+        config = AutoMattyConfig.load_config()
+        config[setting_key] = value
+        success = AutoMattyConfig.save_config(config)
+        
+        if success:
+            desc = setting_config.get("description", setting_key)
+            unreal.log(f"✅ {desc}: {value}")
+        
+        return success
+    
+    @staticmethod
+    def validate_and_create_path(path):
+        """Validate UE path and create folder"""
+        if not path.startswith("/Game/"):
+            unreal.log_warning(f"⚠️ Path should start with /Game/: {path}")
+            return False
+        
+        try:
+            unreal.EditorAssetLibrary.make_directory(path)
+            unreal.log(f"✅ Ensured path exists: {path}")
+            return True
+        except Exception as e:
+            unreal.log_error(f"❌ Failed to create path {path}: {str(e)}")
+            return False
+
+# ========================================
+# LEGACY COMPATIBILITY METHODS
+# ========================================
+
+# Keep old method names for backward compatibility
+AutoMattyConfig.get_custom_material_path = lambda: AutoMattyConfig.get_setting("material_path")
+AutoMattyConfig.get_custom_texture_path = lambda: AutoMattyConfig.get_setting("texture_path") 
+AutoMattyConfig.get_custom_material_prefix = lambda: AutoMattyConfig.get_setting("material_prefix")
+AutoMattyConfig.set_custom_material_path = lambda x: AutoMattyConfig.set_setting("material_path", x)
+AutoMattyConfig.set_custom_texture_path = lambda x: AutoMattyConfig.set_setting("texture_path", x)
+AutoMattyConfig.set_custom_material_prefix = lambda x: AutoMattyConfig.set_setting("material_prefix", x)
+
+# Export texture patterns for other modules
+AutoMattyConfig.TEXTURE_PATTERNS = TEXTURE_PATTERNS
+
+# ========================================
+# WIDGET INTERACTION
+# ========================================
+
+class WidgetManager:
+    """Centralized widget interaction"""
+    
+    @staticmethod
+    def get_widget():
+        """Get widget instance"""
+        try:
+            subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
+            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
+            return subsystem.find_utility_widget_from_blueprint(blueprint) if blueprint else None
+        except:
+            return None
+    
+    @staticmethod
+    def get_checkboxes():
+        """Get all checkbox states"""
+        widget = WidgetManager.get_widget()
+        if not widget:
+            return {key: False for key in FEATURE_CHECKBOXES.keys()}
+        
+        checkboxes = {}
+        for feature_key, widget_property in FEATURE_CHECKBOXES.items():
+            try:
+                checkbox = widget.get_editor_property(widget_property)
+                checkboxes[feature_key] = checkbox.is_checked() if checkbox else False
+            except:
+                checkboxes[feature_key] = False
+        
+        return checkboxes
+    
+    @staticmethod
+    def load_settings_to_widget():
+        """Load all settings into widget"""
+        widget = WidgetManager.get_widget()
+        if not widget:
+            unreal.log_warning("⚠️ No widget found")
+            return False
+        
+        success_count = 0
+        for setting_key, config in SETTINGS_CONFIG.items():
+            try:
+                widget_property = config.get("widget_property")
+                if widget_property:
+                    input_widget = widget.get_editor_property(widget_property)
+                    if input_widget:
+                        value = AutoMattyConfig.get_setting(setting_key)
+                        input_widget.set_text(str(value))
+                        success_count += 1
+            except Exception as e:
+                unreal.log_warning(f"⚠️ Failed to load {setting_key}: {e}")
+        
+        unreal.log(f"📥 Loaded {success_count}/{len(SETTINGS_CONFIG)} settings")
+        return success_count > 0
+    
+    @staticmethod
+    def save_settings_from_widget():
+        """Save all settings from widget"""
+        widget = WidgetManager.get_widget()
+        if not widget:
+            unreal.log_error("❌ No widget found")
+            return False
+        
+        success_count = 0
+        for setting_key, config in SETTINGS_CONFIG.items():
+            try:
+                widget_property = config.get("widget_property")
+                if widget_property:
+                    input_widget = widget.get_editor_property(widget_property)
+                    if input_widget:
+                        value = str(input_widget.get_text()).strip()
+                        if value:  # Only save non-empty values
+                            if AutoMattyConfig.set_setting(setting_key, value):
+                                success_count += 1
+            except Exception as e:
+                unreal.log_warning(f"⚠️ Failed to save {setting_key}: {e}")
+        
+        unreal.log(f"💾 Saved {success_count} settings")
+        return success_count > 0
+
+# ========================================
+# BUTTON ACTION SYSTEM  
+# ========================================
+
+class ButtonActionManager:
+    """Unified button action system"""
+    
+    @staticmethod
+    def execute_action(action_key):
+        """Execute any button action by key"""
+        action_config = BUTTON_ACTIONS.get(action_key)
+        if not action_config:
+            unreal.log_error(f"❌ Unknown action: {action_key}")
+            return False
+        
+        unreal.log(action_config["description"])
+        
+        try:
+            # Import and reload module
+            import importlib
+            module_name = action_config["module"]
+            module = importlib.import_module(module_name)
+            importlib.reload(module)
+            
+            # Get features if needed
+            kwargs = {}
+            if action_config.get("get_features"):
+                kwargs = WidgetManager.get_checkboxes()
+            
+            # Execute the action
+            result = None
+            if "class" in action_config:
+                # Class method approach
+                builder_class = getattr(module, action_config["class"])
+                builder = builder_class()
+                method = getattr(builder, action_config["method"])
+                result = method(**kwargs)
+            else:
+                # Function approach  
+                func = getattr(module, action_config["function"])
+                result = func(**kwargs)
+            
+            # Log success
+            if result:
+                success_msg = action_config["success_msg"]
+                if hasattr(result, 'get_name'):
+                    success_msg += f": {result.get_name()}"
+                unreal.log(success_msg)
+                
+                # Log features if applicable
+                if kwargs:
+                    features = [k.replace('use_', '') for k, v in kwargs.items() if v]
+                    if features:
+                        unreal.log(f"💡 Features: {', '.join(features)}")
+            else:
+                unreal.log("⚠️ Action completed but no result returned")
+            
+            return True
+            
+        except Exception as e:
+            unreal.log_error(f"❌ Action failed: {e}")
+            return False
+
+# ========================================
+# MATERIAL EDITOR INTEGRATION
+# ========================================
 
 def ensure_unreal_qt():
     """Auto-install unreal_qt if missing"""
@@ -16,9 +371,6 @@ def ensure_unreal_qt():
         unreal.log("📦 Installing unreal-qt dependency...")
         
         import subprocess
-        import sys
-        import os
-        
         python_exe = sys.executable
         
         try:
@@ -33,296 +385,196 @@ def ensure_unreal_qt():
             unreal.log_error(f"❌ Failed to install unreal-qt: {e}")
             return False
 
-def show_error_dialog(title, message, details=None):
-    """Show user-friendly error dialog"""
-    try:
-        from PySide6.QtWidgets import QMessageBox
-        
-        msg = QMessageBox()
-        msg.setWindowTitle(f"AutoMatty - {title}")
-        msg.setIcon(QMessageBox.Warning)
-        msg.setText(message)
-        
-        if details:
-            msg.setInformativeText(details)
-        
-        msg.exec_()
-    except:
-        unreal.log_error(f"❌ {title}: {message}")
-        if details:
-            unreal.log_error(f"   {details}")
-
-def show_success_dialog(title, message, details=None):
-    """Show success notification"""
-    try:
-        from PySide6.QtWidgets import QMessageBox
-        
-        msg = QMessageBox()
-        msg.setWindowTitle(f"AutoMatty - {title}")
-        msg.setIcon(QMessageBox.Information)
-        msg.setText(message)
-        
-        if details:
-            msg.setInformativeText(details)
-        
-        msg.exec_()
-    except:
-        unreal.log(f"✅ {title}: {message}")
-
 def show_material_editor():
-    """Enhanced show material editor with error handling"""
+    """Show material editor with dependency handling"""
     try:
+        if not ensure_unreal_qt():
+            return False
+        
         import unreal_qt
         unreal_qt.setup()
         
         import automatty_material_instance_editor
+        import importlib
+        importlib.reload(automatty_material_instance_editor)
+        
         automatty_material_instance_editor.show_editor_for_selection()
+        return True
         
-    except ImportError:
-        show_error_dialog(
-            "Missing Dependency", 
-            "unreal-qt is required for the Material Editor.",
-            "Install it with: pip install unreal-qt"
-        )
     except Exception as e:
-        show_error_dialog("Material Editor Error", f"Failed to open editor: {e}")
+        unreal.log_error(f"❌ Material editor failed: {e}")
+        return False
 
-def debug_selected_materials():
-    """Debug function to see what materials are on selected mesh"""
-    editor_actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    selected_actors = editor_actor_subsystem.get_selected_level_actors()
-    
-    unreal.log(f"🔍 Found {len(selected_actors)} selected actors")
-    
-    for actor in selected_actors:
-        unreal.log(f"  Actor: {actor.get_name()} ({type(actor).__name__})")
-        
-        if isinstance(actor, (unreal.StaticMeshActor, unreal.SkeletalMeshActor)):
-            if isinstance(actor, unreal.StaticMeshActor):
-                mesh_component = actor.get_component_by_class(unreal.StaticMeshComponent)
-            else:
-                mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
-            
-            if mesh_component:
-                num_materials = mesh_component.get_num_materials()
-                unreal.log(f"    Materials: {num_materials}")
-                
-                for i in range(num_materials):
-                    material = mesh_component.get_material(i)
-                    if material:
-                        mat_type = type(material).__name__
-                        unreal.log(f"      Slot {i}: {material.get_name()} ({mat_type})")
-                    else:
-                        unreal.log(f"      Slot {i}: None")
+# ========================================
+# MENU SYSTEM
+# ========================================
 
-# Setup AutoMatty path
-def setup_automatty_path():
-    """Ensure AutoMatty scripts path is available"""
-    possible_paths = [
-        os.path.join(unreal.Paths.project_dir(), "Plugins", "AutoMatty", "Scripts"),
-        os.path.join(unreal.Paths.engine_dir(), "Plugins", "AutoMatty", "Scripts"),
-    ]
+@unreal.uclass()
+class AutoMattyMenuScript(unreal.ToolMenuEntryScript):
+    """Material Editor menu entry"""
     
-    for path in possible_paths:
-        if os.path.exists(path) and os.path.isdir(path):
-            if path not in sys.path:
-                sys.path.insert(0, path)
-            unreal.log(f"📁 AutoMatty scripts loaded from: {path}")
-            return path
-    
-    unreal.log_error("❌ AutoMatty plugin not found in engine or project directories")
-    return None
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        show_material_editor()
 
-# Run setup immediately
-setup_automatty_path()
+@unreal.uclass()  
+class AutoMattyWidgetScript(unreal.ToolMenuEntryScript):
+    """Main widget menu entry"""
+    
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        try:
+            subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
+            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
+            if blueprint:
+                widget = subsystem.spawn_and_register_tab(blueprint)
+                if widget:
+                    unreal.log("🎯 AutoMatty widget opened!")
+                else:
+                    unreal.log_error("❌ Failed to spawn widget")
+        except Exception as e:
+            unreal.log_error(f"❌ Widget failed: {e}")
 
-# Import AutoMatty modules
-try:
-    from automatty_utils import setup_automatty_imports
-    setup_automatty_imports()
-except ImportError as e:
-    unreal.log_error(f"❌ Failed to import automatty_utils: {e}")
-
-class AutoMattyConfig:
-    """Centralized config for AutoMatty plugin"""
+class MenuManager:
+    """Menu registration management"""
     
-    DEFAULT_MATERIAL_PATH = "/Game/Materials/AutoMatty"
-    DEFAULT_TEXTURE_PATH = "/Game/Textures/AutoMatty"
-    DEFAULT_FUNCTION_PATH = "/Game/Functions"
-    DEFAULT_MATERIAL_PREFIX = "M_AutoMatty"
-    
-    CHEAP_CONTRAST_FUNC = "CheapContrast"
-    REMAP_VALUE_FUNC = "RemapValueRange"
-    
-    UI_SETTINGS_SECTION = "AutoMattyPlugin"
-    CUSTOM_MATERIAL_PATH_KEY = "CustomMaterialPath"
-    CUSTOM_TEXTURE_PATH_KEY = "CustomTexturePath"
-    CUSTOM_MATERIAL_PREFIX_KEY = "CustomMaterialPrefix"
-    
-    TEXTURE_PATTERNS = {
-        "ORM": re.compile(r"(?:^|[_\W])orm(?:$|[_\W])|occlusion[-_]?roughness[-_]?metal(?:lic|ness)", re.IGNORECASE),
-        "Color": re.compile(r"(colou?r|albedo|base[-_]?color|diffuse)", re.IGNORECASE),
-        "Normal": re.compile(r"normal", re.IGNORECASE),
-        "Occlusion": re.compile(r"(?:^|[_\W])(?:ao|occlusion)(?:$|[_\W])", re.IGNORECASE),
-        "Roughness": re.compile(r"roughness", re.IGNORECASE),
-        "Metallic": re.compile(r"metal(?:lic|ness)", re.IGNORECASE),
-        "Height": re.compile(r"(?:^|[_\W])(?:height|disp|displacement)(?:$|[_\W])", re.IGNORECASE),
-        "Emission": re.compile(r"(?:^|[_\W])(?:emission|emissive|glow)(?:$|[_\W])", re.IGNORECASE),
-        "BlendMask": re.compile(r"(?:^|[_\W])(?:blend|mask|mix)(?:$|[_\W])", re.IGNORECASE),
-    }
+    _menu_script = None
+    _widget_script = None
     
     @staticmethod
-    def get_custom_material_path():
-        """Get user-defined material path from config file"""
-        config_file = AutoMattyConfig._get_config_file_path()
-        
+    def register_menus():
+        """Register both menu entries"""
         try:
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    import json
-                    config_data = json.load(f)
-                    custom_path = config_data.get('material_path', '')
-                    return custom_path if custom_path.strip() else AutoMattyConfig.DEFAULT_MATERIAL_PATH
+            menus = unreal.ToolMenus.get()
+            
+            # Widget entry
+            MenuManager._widget_script = AutoMattyWidgetScript()
+            MenuManager._widget_script.init_entry(
+                owner_name="AutoMatty",
+                menu="LevelEditor.MainMenu.Tools",
+                section="LevelEditorModules", 
+                name="AutoMattyWidget",
+                label="AutoMatty",
+                tool_tip="Open AutoMatty main widget"
+            )
+            MenuManager._widget_script.register_menu_entry()
+            
+            # Editor entry
+            MenuManager._menu_script = AutoMattyMenuScript()
+            MenuManager._menu_script.init_entry(
+                owner_name="AutoMatty",
+                menu="LevelEditor.MainMenu.Tools",
+                section="LevelEditorModules",
+                name="AutoMattyMaterialEditor", 
+                label="AutoMatty Material Editor",
+                tool_tip="Open AutoMatty Material Instance Editor"
+            )
+            MenuManager._menu_script.register_menu_entry()
+            
+            menus.refresh_all_widgets()
+            unreal.log("✅ AutoMatty menus registered!")
+            return True
+            
         except Exception as e:
-            unreal.log_warning(f"Could not read config: {e}")
-        
-        return AutoMattyConfig.DEFAULT_MATERIAL_PATH
-    
-    @staticmethod
-    def set_custom_material_path(path):
-        """Save custom material path to config file"""
-        config_file = AutoMattyConfig._get_config_file_path()
-        
-        try:
-            os.makedirs(os.path.dirname(config_file), exist_ok=True)
-            
-            config_data = {}
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    import json
-                    config_data = json.load(f)
-            
-            config_data['material_path'] = path
-            with open(config_file, 'w') as f:
-                import json
-                json.dump(config_data, f, indent=2)
-            
-            unreal.log(f"📁 Custom material path set to: {path}")
-        except Exception as e:
-            unreal.log_error(f"Failed to save config: {e}")
-    
-    @staticmethod
-    def get_custom_texture_path():
-        """Get user-defined texture path from config file"""
-        config_file = AutoMattyConfig._get_config_file_path()
-        
-        try:
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    import json
-                    config_data = json.load(f)
-                    custom_path = config_data.get('texture_path', '')
-                    return custom_path if custom_path.strip() else AutoMattyConfig.DEFAULT_TEXTURE_PATH
-        except Exception as e:
-            unreal.log_warning(f"Could not read texture path config: {e}")
-        
-        return AutoMattyConfig.DEFAULT_TEXTURE_PATH
-    
-    @staticmethod
-    def set_custom_texture_path(path):
-        """Save custom texture path to config file"""
-        config_file = AutoMattyConfig._get_config_file_path()
-        
-        try:
-            os.makedirs(os.path.dirname(config_file), exist_ok=True)
-            
-            config_data = {}
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    import json
-                    config_data = json.load(f)
-            
-            config_data['texture_path'] = path
-            with open(config_file, 'w') as f:
-                import json
-                json.dump(config_data, f, indent=2)
-            
-            unreal.log(f"🖼️ Custom texture path set to: {path}")
-        except Exception as e:
-            unreal.log_error(f"Failed to save texture path config: {e}")
-    
-    @staticmethod
-    def get_custom_material_prefix():
-        """Get user-defined material prefix from config file"""
-        config_file = AutoMattyConfig._get_config_file_path()
-        
-        try:
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    import json
-                    config_data = json.load(f)
-                    return config_data.get('material_prefix', AutoMattyConfig.DEFAULT_MATERIAL_PREFIX)
-        except Exception as e:
-            unreal.log_warning(f"Could not read material prefix config: {e}")
-        
-        return AutoMattyConfig.DEFAULT_MATERIAL_PREFIX
-    
-    @staticmethod
-    def set_custom_material_prefix(prefix):
-        """Save custom material prefix to config file"""
-        config_file = AutoMattyConfig._get_config_file_path()
-        
-        try:
-            os.makedirs(os.path.dirname(config_file), exist_ok=True)
-            
-            config_data = {}
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    import json
-                    config_data = json.load(f)
-            
-            config_data['material_prefix'] = prefix
-            with open(config_file, 'w') as f:
-                import json
-                json.dump(config_data, f, indent=2)
-            
-            unreal.log(f"🏷️ Material prefix set to: {prefix}")
-        except Exception as e:
-            unreal.log_error(f"Failed to save material prefix config: {e}")
-    
-    @staticmethod
-    def _get_config_file_path():
-        """Get the config file path"""
-        proj_dir = unreal.Paths.project_dir()
-        config_dir = os.path.join(proj_dir, "Saved", "Config", "AutoMatty")
-        return os.path.join(config_dir, "automatty_config.json")
-    
-    @staticmethod
-    def validate_and_create_path(path):
-        """Validate path and create folder if needed"""
-        if not path.startswith("/Game/"):
-            unreal.log_warning(f"⚠️ Path should start with /Game/: {path}")
+            unreal.log_error(f"❌ Menu registration failed: {e}")
             return False
-        
+    
+    @staticmethod
+    def unregister_menus():
+        """Unregister menu entries"""
         try:
-            unreal.EditorAssetLibrary.make_directory(path)
-            unreal.log(f"✅ Ensured path exists: {path}")
+            menus = unreal.ToolMenus.get()
+            menus.unregister_owner_by_name("AutoMatty")
+            menus.refresh_all_widgets()
+            MenuManager._menu_script = None
+            MenuManager._widget_script = None
+            unreal.log("🗑️ AutoMatty menus unregistered")
             return True
         except Exception as e:
-            unreal.log_error(f"❌ Failed to create path {path}: {str(e)}")
+            unreal.log_error(f"❌ Menu unregistration failed: {e}")
             return False
 
-class AutoMattyUtils:
-    """Utility functions for AutoMatty"""
+# ========================================
+# PUBLIC API FUNCTIONS (for widget buttons)
+# ========================================
+
+# Settings functions
+def load_current_settings():
+    """Load settings into widget"""
+    return WidgetManager.load_settings_to_widget()
+
+def apply_all_settings():
+    """Save all settings from widget"""
+    return WidgetManager.save_settings_from_widget()
+
+# Material creation functions  
+def create_orm_material():
+    """Create ORM material"""
+    return ButtonActionManager.execute_action("create_orm")
+
+def create_split_material():
+    """Create Split material"""
+    return ButtonActionManager.execute_action("create_split")
+
+def create_environment_material():
+    """Create Environment material"""  
+    return ButtonActionManager.execute_action("create_environment")
+
+def create_material_instance():
+    """Create material instance"""
+    return ButtonActionManager.execute_action("create_instance")
+
+def repath_material_instances():
+    """Repath material instances"""
+    return ButtonActionManager.execute_action("repath_instances")
+
+# Legacy UI functions (for backward compatibility)
+def ui_get_current_material_path():
+    return AutoMattyConfig.get_setting("material_path")
+
+def ui_set_custom_material_path(path):
+    clean_path = path.strip()
+    if clean_path.startswith("/All/Game/"):
+        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
+    elif not clean_path.startswith("/Game/") and clean_path:
+        clean_path = f"/Game/{clean_path.lstrip('/')}"
     
-    @staticmethod
-    def get_user_path(prompt_text, default_path):
-        """Get path from user with default fallback"""
-        return default_path
+    if clean_path and AutoMattyConfig.validate_and_create_path(clean_path):
+        return AutoMattyConfig.set_setting("material_path", clean_path)
+    return AutoMattyConfig.set_setting("material_path", "")
+
+def ui_get_current_texture_path():
+    return AutoMattyConfig.get_setting("texture_path")
+
+def ui_set_custom_texture_path(path):
+    clean_path = path.strip()
+    if clean_path.startswith("/All/Game/"):
+        clean_path = clean_path.replace("/All/Game/", "/Game/", 1) 
+    elif not clean_path.startswith("/Game/") and clean_path:
+        clean_path = f"/Game/{clean_path.lstrip('/')}"
+    
+    if clean_path and AutoMattyConfig.validate_and_create_path(clean_path):
+        return AutoMattyConfig.set_setting("texture_path", clean_path)
+    return AutoMattyConfig.set_setting("texture_path", "")
+
+def ui_get_current_material_prefix():
+    return AutoMattyConfig.get_setting("material_prefix")
+
+def ui_set_custom_material_prefix(prefix):
+    return AutoMattyConfig.set_setting("material_prefix", prefix.strip())
+
+def ui_get_current_hotkey():
+    return AutoMattyConfig.get_setting("hotkey")
+
+def ui_set_hotkey(hotkey):
+    return AutoMattyConfig.set_setting("hotkey", hotkey.strip().upper())
+
+# Utility classes for other modules
+class AutoMattyUtils:
+    """Utility functions"""
     
     @staticmethod
     def is_substrate_enabled():
-        """Check if Substrate material system is enabled"""
         try:
             temp_mat = unreal.Material()
             lib = unreal.MaterialEditingLibrary
@@ -331,12 +583,10 @@ class AutoMattyUtils:
             )
             return temp_node is not None
         except:
-            unreal.log_warning("Could not determine Substrate status - assuming enabled")
             return True
     
-    @staticmethod
+    @staticmethod 
     def get_next_asset_name(base_name, folder, prefix="v", pad=3):
-        """Generate versioned asset name"""
         registry = unreal.AssetRegistryHelpers.get_asset_registry()
         assets = registry.get_assets_by_path(folder, recursive=False)
         pat = re.compile(rf"^{re.escape(base_name)}_{prefix}(\d{{{pad}}})$")
@@ -349,72 +599,43 @@ class AutoMattyUtils:
     
     @staticmethod
     def find_default_normal():
-        """Find engine's default normal texture"""
         for path in unreal.EditorAssetLibrary.list_assets("/Engine", recursive=True, include_folder=False):
             if path.lower().endswith("defaultnormal"):
                 return unreal.EditorAssetLibrary.load_asset(path)
-        unreal.log_warning("Could not find DefaultNormal in /Engine")
         return None
     
     @staticmethod
-    def check_material_function_exists(func_name, search_path=None):
-        """Check if a material function exists"""
-        if search_path is None:
-            search_path = AutoMattyConfig.DEFAULT_FUNCTION_PATH
-        
-        func_path = f"{search_path}/{func_name}"
-        return unreal.EditorAssetLibrary.does_asset_exist(func_path)
-    
-    @staticmethod
     def extract_material_base_name(textures):
-        """Extract base material name from texture list"""
-        
         if not textures:
             return "Material"
         
         first_texture = textures[0].get_name()
-        
         base_name = first_texture
         
-        # Remove file extensions if somehow present
+        # Remove common suffixes
         base_name = re.sub(r'\.(jpg|png|tga|exr|hdr|tiff)$', '', base_name, flags=re.IGNORECASE)
-        
-        # Remove UDIM patterns (1001, 1002, etc or <udim>)
         base_name = re.sub(r'_(?:10\d{2}|<udim>)', '', base_name, flags=re.IGNORECASE)
-        
-        # Remove colorspace info (sRGB, Linear, etc)
         base_name = re.sub(r'_(?:srgb|linear|rec709|aces)', '', base_name, flags=re.IGNORECASE)
-        
-        # Remove resolution info (2K, 4K, 1024, etc)
         base_name = re.sub(r'_(?:\d+k|\d{3,4})$', '', base_name, flags=re.IGNORECASE)
         
-        # Remove texture type suffixes
         texture_types = [
             'color', 'colour', 'albedo', 'diffuse', 'basecolor', 'base_color',
-            'normal', 'norm', 'nrm', 'bump',
-            'roughness', 'rough', 'gloss',
-            'metallic', 'metalness', 'metal',
-            'specular', 'spec',
-            'occlusion', 'ao', 'ambient_occlusion',
-            'orm', 'rma', 'mas',
-            'height', 'displacement', 'disp',
-            'emission', 'emissive', 'glow',
+            'normal', 'norm', 'nrm', 'bump', 'roughness', 'rough', 'gloss',
+            'metallic', 'metalness', 'metal', 'specular', 'spec',
+            'occlusion', 'ao', 'ambient_occlusion', 'orm', 'rma', 'mas',
+            'height', 'displacement', 'disp', 'emission', 'emissive', 'glow',
             'blend', 'mask', 'mix'
         ]
         
         type_pattern = r'_(?:' + '|'.join(texture_types) + r')(?:_.*)?$'
         base_name = re.sub(type_pattern, '', base_name, flags=re.IGNORECASE)
-        
-        # Clean up any trailing underscores or numbers
         base_name = re.sub(r'_+$', '', base_name)
         base_name = re.sub(r'_v?\d+$', '', base_name)
         
-        # If we stripped everything, use a fallback
         if not base_name or len(base_name) < 2:
             fallback = re.split(r'[_\-\.]', first_texture)[0]
             base_name = fallback if fallback else "Material"
         
-        # Ensure it starts with a letter (UE naming convention)
         if not re.match(r'^[a-zA-Z]', base_name):
             base_name = f"Mat_{base_name}"
         
@@ -422,16 +643,10 @@ class AutoMattyUtils:
     
     @staticmethod
     def generate_smart_instance_name(base_material, textures, custom_path=None):
-        """Generate smart instance name based on textures"""
-        
         material_base = AutoMattyUtils.extract_material_base_name(textures)
-        
         instance_name = f"M_{material_base}_Inst"
         
-        if custom_path:
-            folder = custom_path
-        else:
-            folder = AutoMattyConfig.get_custom_material_path()
+        folder = custom_path or AutoMattyConfig.get_setting("material_path")
         
         full_path = f"{folder}/{instance_name}"
         if unreal.EditorAssetLibrary.does_asset_exist(full_path):
@@ -441,323 +656,5 @@ class AutoMattyUtils:
         
         return instance_name, folder
 
-# ========================================
-# UI INTEGRATION FUNCTIONS
-# ========================================
-
-def ui_set_custom_material_path(path_string):
-    """Called from UI when user sets custom material path"""
-    if not path_string.strip():
-        unreal.log("📁 Using default material path")
-        AutoMattyConfig.set_custom_material_path("")
-        return True
-    
-    clean_path = path_string.strip()
-    
-    if clean_path.startswith("/All/Game/"):
-        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
-    elif not clean_path.startswith("/Game/"):
-        clean_path = f"/Game/{clean_path.lstrip('/')}"
-    
-    if AutoMattyConfig.validate_and_create_path(clean_path):
-        AutoMattyConfig.set_custom_material_path(clean_path)
-        return True
-    else:
-        return False
-
-def ui_get_current_material_path():
-    """Get current material path for UI display"""
-    return AutoMattyConfig.get_custom_material_path()
-
-def ui_set_custom_texture_path(path_string):
-    """Called from UI when user sets custom texture path"""
-    if not path_string.strip():
-        unreal.log("🖼️ Using default texture path")
-        AutoMattyConfig.set_custom_texture_path("")
-        return True
-    
-    clean_path = path_string.strip()
-    
-    if clean_path.startswith("/All/Game/"):
-        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
-    elif not clean_path.startswith("/Game/"):
-        clean_path = f"/Game/{clean_path.lstrip('/')}"
-    
-    if AutoMattyConfig.validate_and_create_path(clean_path):
-        AutoMattyConfig.set_custom_texture_path(clean_path)
-        return True
-    else:
-        return False
-
-def ui_get_current_texture_path():
-    """Get current texture path for UI display"""
-    return AutoMattyConfig.get_custom_texture_path()
-
-def ui_set_custom_material_prefix(prefix_string):
-    """Called from UI when user sets custom material prefix"""
-    clean_prefix = prefix_string.strip() or AutoMattyConfig.DEFAULT_MATERIAL_PREFIX
-    AutoMattyConfig.set_custom_material_prefix(clean_prefix)
-    return True
-
-def ui_get_current_material_prefix():
-    """Get current material prefix for UI display"""
-    return AutoMattyConfig.get_custom_material_prefix()
-
-# ========================================
-# STREAMLINED UI FUNCTIONS
-# ========================================
-
-def get_widget():
-    """Get the widget instance"""
-    try:
-        subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
-        blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
-        return subsystem.find_utility_widget_from_blueprint(blueprint) if blueprint else None
-    except:
-        return None
-
-def apply_all_settings():
-    """Apply ALL settings at once"""
-    widget = get_widget()
-    if not widget:
-        unreal.log_error("❌ No widget found")
-        return
-    
-    try:
-        prefix = str(widget.get_editor_property('MaterialPrefixInput').get_text()).strip()
-        mat_path = str(widget.get_editor_property('MaterialPathInput').get_text()).strip()
-        tex_path = str(widget.get_editor_property('TexturePathInput').get_text()).strip()
-        
-        results = []
-        if prefix:
-            ui_set_custom_material_prefix(prefix)
-            results.append(f"Prefix: {prefix}")
-        if mat_path:
-            ui_set_custom_material_path(mat_path)
-            results.append(f"Material: {mat_path}")
-        if tex_path:
-            ui_set_custom_texture_path(tex_path)
-            results.append(f"Texture: {tex_path}")
-        
-        if results:
-            unreal.log(f"✅ Settings applied: {' | '.join(results)}")
-        else:
-            unreal.log("⚠️ No settings to apply")
-            
-    except Exception as e:
-        unreal.log_error(f"❌ Settings failed: {e}")
-
-def load_current_settings():
-    """Load current settings into the widget inputs"""
-    widget = get_widget()
-    if not widget:
-        unreal.log_warning("⚠️ No widget found for settings load")
-        return
-    
-    try:
-        widget.get_editor_property('MaterialPrefixInput').set_text(ui_get_current_material_prefix())
-        widget.get_editor_property('MaterialPathInput').set_text(ui_get_current_material_path())
-        widget.get_editor_property('TexturePathInput').set_text(ui_get_current_texture_path())
-        
-        unreal.log("📥 Current settings loaded into UI")
-        
-    except Exception as e:
-        unreal.log_error(f"❌ Load settings failed: {e}")
-
-# Auto-save functions
-def auto_save_prefix():
-    widget = get_widget()
-    if widget:
-        try:
-            prefix = str(widget.get_editor_property('MaterialPrefixInput').get_text()).strip()
-            if prefix:
-                ui_set_custom_material_prefix(prefix)
-        except:
-            pass
-
-def auto_save_material_path():
-    widget = get_widget()
-    if widget:
-        try:
-            path = str(widget.get_editor_property('MaterialPathInput').get_text()).strip()
-            if path:
-                ui_set_custom_material_path(path)
-        except:
-            pass
-
-def auto_save_texture_path():
-    widget = get_widget()
-    if widget:
-        try:
-            path = str(widget.get_editor_property('TexturePathInput').get_text()).strip()
-            if path:
-                ui_set_custom_texture_path(path)
-        except:
-            pass
-
-# ========================================
-# BUTTON FUNCTIONS - NO RELOAD
-# ========================================
-
-def get_checkboxes():
-    """Get checkbox states from widget"""
-    checkboxes = {
-        'use_nanite': False,
-        'use_second_roughness': False,
-        'use_adv_env': False,
-        'use_triplanar': False,
-        'use_tex_var': False
-    }
-    
-    try:
-        widget = get_widget()
-        if widget:
-            nanite_checkbox = widget.get_editor_property("UseNanite")
-            roughness_checkbox = widget.get_editor_property("UseSecondRoughness")
-            adv_env_checkbox = widget.get_editor_property("UseAdvEnv")
-            triplanar_checkbox = widget.get_editor_property("UseTriplanar")
-            tex_var_checkbox = widget.get_editor_property("UseTexVar")
-            
-            checkboxes['use_nanite'] = nanite_checkbox.is_checked() if nanite_checkbox else False
-            checkboxes['use_second_roughness'] = roughness_checkbox.is_checked() if roughness_checkbox else False
-            checkboxes['use_adv_env'] = adv_env_checkbox.is_checked() if adv_env_checkbox else False
-            checkboxes['use_triplanar'] = triplanar_checkbox.is_checked() if triplanar_checkbox else False
-            checkboxes['use_tex_var'] = tex_var_checkbox.is_checked() if tex_var_checkbox else False
-            
-            unreal.log(f"✅ Checkboxes: Nanite={checkboxes['use_nanite']}, SecondRough={checkboxes['use_second_roughness']}, AdvEnv={checkboxes['use_adv_env']}, Triplanar={checkboxes['use_triplanar']}, TexVar={checkboxes['use_tex_var']}")
-    except Exception as e:
-        unreal.log_error(f"⚠️ Checkbox access failed: {e}")
-    
-    return checkboxes
-
-def create_orm_material():
-    """Create ORM material - NO RELOAD"""
-    unreal.log("🔧 Creating ORM Material...")
-    
-    try:
-        import automatty_builder
-        from automatty_builder import SubstrateMaterialBuilder
-        
-        checkboxes = get_checkboxes()
-        builder = SubstrateMaterialBuilder()
-        
-        material = builder.create_orm_material(
-            use_second_roughness=checkboxes['use_second_roughness'],
-            use_nanite=checkboxes['use_nanite'],
-            use_triplanar=checkboxes['use_triplanar'],
-            use_tex_var=checkboxes['use_tex_var']
-        )
-        
-        if material:
-            features = []
-            if checkboxes['use_second_roughness']: features.append("dual-roughness")
-            if checkboxes['use_nanite']: features.append("nanite displacement")
-            if checkboxes['use_triplanar']: features.append("triplanar mapping")
-            if checkboxes['use_tex_var']: features.append("texture variation")
-            feature_text = f" with {', '.join(features)}" if features else ""
-            unreal.log(f"🎉 SUCCESS! Created ORM material{feature_text}: {material.get_name()}")
-        else:
-            unreal.log_error("❌ Failed to create ORM material")
-            
-    except Exception as e:
-        unreal.log_error(f"❌ Error creating ORM material: {e}")
-
-def create_split_material():
-    """Create Split material - NO RELOAD"""
-    unreal.log("🔧 Creating Split Material...")
-    
-    try:
-        import automatty_builder
-        from automatty_builder import SubstrateMaterialBuilder
-        
-        checkboxes = get_checkboxes()
-        builder = SubstrateMaterialBuilder()
-        
-        material = builder.create_split_material(
-            use_second_roughness=checkboxes['use_second_roughness'],
-            use_nanite=checkboxes['use_nanite'],
-            use_triplanar=checkboxes['use_triplanar'],
-            use_tex_var=checkboxes['use_tex_var']
-        )
-        
-        if material:
-            features = []
-            if checkboxes['use_second_roughness']: features.append("dual-roughness")
-            if checkboxes['use_nanite']: features.append("nanite displacement")
-            if checkboxes['use_triplanar']: features.append("triplanar mapping")
-            if checkboxes['use_tex_var']: features.append("texture variation")
-            feature_text = f" with {', '.join(features)}" if features else ""
-            unreal.log(f"🎉 SUCCESS! Created Split material{feature_text}: {material.get_name()}")
-        else:
-            unreal.log_error("❌ Failed to create Split material")
-            
-    except Exception as e:
-        unreal.log_error(f"❌ Error creating Split material: {e}")
-
-def create_environment_material():
-    """Create Environment material - NO RELOAD"""
-    unreal.log("🔧 Creating Environment Material...")
-    
-    try:
-        import automatty_builder
-        from automatty_builder import SubstrateMaterialBuilder
-        
-        checkboxes = get_checkboxes()
-        builder = SubstrateMaterialBuilder()
-        
-        material = builder.create_environment_material(
-            use_adv_env=checkboxes['use_adv_env'],
-            use_triplanar=checkboxes['use_triplanar'],
-            use_nanite=checkboxes['use_nanite'],
-            use_tex_var=checkboxes['use_tex_var']
-        )
-        
-        if material:
-            features = []
-            if checkboxes['use_adv_env']: features.append("advanced-mixing")
-            if checkboxes['use_triplanar']: features.append("triplanar")
-            if checkboxes['use_nanite']: features.append("nanite")
-            if checkboxes['use_tex_var']: features.append("texture-variation")
-            feature_text = f" ({', '.join(features)})" if features else ""
-            unreal.log(f"🎉 SUCCESS! Created Environment material{feature_text}: {material.get_name()}")
-            if checkboxes['use_adv_env']:
-                unreal.log("💀 Your GPU will hate this advanced version")
-        else:
-            unreal.log_error("❌ Failed to create Environment material")
-            
-    except Exception as e:
-        unreal.log_error(f"❌ Error creating Environment material: {e}")
-
-def create_material_instance():
-    """Create Material Instance - NO RELOAD"""
-    unreal.log("🔧 Creating Smart Material Instance...")
-    
-    try:
-        import automatty_instancer
-        from automatty_instancer import create_material_instance
-        
-        instance = create_material_instance()
-        
-        if instance:
-            unreal.log(f"🎉 SUCCESS! Created material instance: {instance.get_name()}")
-        else:
-            unreal.log("⚠️ No instance created - check selection and textures")
-            
-    except Exception as e:
-        unreal.log_error(f"❌ Error creating material instance: {e}")
-
-def repath_material_instances():
-    """Repath Material Instances - NO RELOAD"""
-    unreal.log("🔧 Repathing Material Instances...")
-    
-    try:
-        import automatty_repather
-        from automatty_repather import repath_material_instances as repath_func
-        
-        repath_func()
-        unreal.log("🏆 Texture repathing completed")
-        
-    except Exception as e:
-        unreal.log_error(f"❌ Error repathing materials: {e}")
-
-unreal.log("✅ AutoMatty config loaded (complete, no menu crashes)")
+# Auto-setup
+MenuManager.register_menus()
