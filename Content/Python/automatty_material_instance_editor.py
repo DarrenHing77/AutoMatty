@@ -1,6 +1,6 @@
 """
-AutoMatty Material Instance Editor - FIXED VERSION
-Fixes rendering artifacts and adds resizable columns
+AutoMatty Material Instance Editor - VISUAL OVERHAUL
+Drag-value boxes with progress bar fills and #0d3c87 color scheme
 """
 
 import unreal_qt
@@ -14,130 +14,194 @@ from PySide6.QtGui import *
 # Global widget reference for hot reloading
 material_editor_widget = None
 
-class ModifierAwareSlider(QSlider):
-    """Custom slider that respects modifier keys for fine/coarse control"""
+class DragValueBox(QWidget):
+    """Custom drag-value box with progress bar fill"""
+    value_changed = Signal(float)
     
-    def __init__(self, orientation, parent=None):
-        super().__init__(orientation, parent)
-        self.base_step = 1  # Base step size
-        self.fine_step = 0.1  # Shift modifier (fine)
-        self.coarse_step = 10  # Ctrl modifier (coarse)
+    def __init__(self, min_val=0.0, max_val=1.0, current_val=0.5, decimals=3, parent=None):
+        super().__init__(parent)
+        self.min_val = min_val
+        self.max_val = max_val
+        self.current_val = current_val
+        self.decimals = decimals
+        self.is_dragging = False
+        self.drag_start_pos = None
+        self.drag_start_value = None
+        self.is_editing = False
         
-    def wheelEvent(self, event):
-        """Handle mouse wheel with modifier support"""
-        modifiers = QApplication.keyboardModifiers()
+        # Modifier sensitivity
+        self.base_sensitivity = 0.005
+        self.fine_sensitivity = 0.001  # Shift
+        self.coarse_sensitivity = 0.02  # Ctrl
         
-        # Determine step size based on modifiers
-        if modifiers & Qt.ShiftModifier:
-            step = self.fine_step
-        elif modifiers & Qt.ControlModifier:
-            step = self.coarse_step
-        else:
-            step = self.base_step
+        # Setup
+        self.setFixedWidth(80)
+        self.setFixedHeight(25)
+        self.setFocusPolicy(Qt.ClickFocus)
+        self.setCursor(Qt.SizeHorCursor)
         
-        # Get wheel direction
-        delta = event.angleDelta().y()
-        if delta > 0:
-            new_value = self.value() + step
-        else:
-            new_value = self.value() - step
+        # Line edit for manual input (hidden by default)
+        self.line_edit = QLineEdit(self)
+        self.line_edit.setGeometry(2, 2, self.width()-4, self.height()-4)
+        self.line_edit.hide()
+        self.line_edit.editingFinished.connect(self.finish_editing)
+        self.line_edit.focusOutEvent = self.line_edit_focus_out
         
-        # Clamp to range
-        new_value = max(self.minimum(), min(self.maximum(), new_value))
-        self.setValue(int(new_value))
+        self.update_display()
+    
+    def get_progress(self):
+        """Get progress as 0-1 value"""
+        if self.max_val == self.min_val:
+            return 0.0
+        return (self.current_val - self.min_val) / (self.max_val - self.min_val)
+    
+    def set_value(self, value):
+        """Set value and update display"""
+        self.current_val = max(self.min_val, min(self.max_val, value))
+        self.update_display()
+        self.value_changed.emit(self.current_val)
+    
+    def update_display(self):
+        """Force repaint"""
+        self.update()
+    
+    def paintEvent(self, event):
+        """Custom paint with progress bar fill"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
         
-        event.accept()
+        rect = self.rect()
+        
+        # Background
+        bg_color = QColor("#3c3c3c" if not self.is_editing else "#4a4a4a")
+        painter.fillRect(rect, bg_color)
+        
+        # Progress fill
+        progress = self.get_progress()
+        if progress > 0:
+            fill_width = int(rect.width() * progress)
+            fill_rect = QRect(0, 0, fill_width, rect.height())
+            fill_color = QColor("#0d3c87")  # Your custom blue
+            painter.fillRect(fill_rect, fill_color)
+        
+        # Border
+        border_color = QColor("#0d3c87" if self.hasFocus() else "#555")
+        painter.setPen(QPen(border_color, 1))
+        painter.drawRect(rect.adjusted(0, 0, -1, -1))
+        
+        # Text
+        if not self.is_editing:
+            text = f"{self.current_val:.{self.decimals}f}"
+            painter.setPen(QColor("white"))
+            painter.drawText(rect, Qt.AlignCenter, text)
     
     def mousePressEvent(self, event):
-        """Track mouse press for drag detection"""
+        """Handle mouse press for dragging"""
         if event.button() == Qt.LeftButton:
-            self.start_value = self.value()
-            self.start_pos = event.pos()
+            self.is_dragging = True
+            self.drag_start_pos = event.pos()
+            self.drag_start_value = self.current_val
+            self.setCursor(Qt.SizeHorCursor)
         super().mousePressEvent(event)
     
     def mouseMoveEvent(self, event):
-        """Handle mouse drag with modifier-aware sensitivity"""
-        if event.buttons() & Qt.LeftButton:
-            modifiers = QApplication.keyboardModifiers()
-            
+        """Handle drag to change value"""
+        if self.is_dragging and self.drag_start_pos:
             # Calculate sensitivity based on modifiers
+            modifiers = QApplication.keyboardModifiers()
             if modifiers & Qt.ShiftModifier:
-                sensitivity = 0.2  # 5x slower
+                sensitivity = self.fine_sensitivity
             elif modifiers & Qt.ControlModifier:
-                sensitivity = 5.0   # 5x faster
+                sensitivity = self.coarse_sensitivity
             else:
-                sensitivity = 1.0   # Normal speed
+                sensitivity = self.base_sensitivity
             
-            # Calculate movement
-            if hasattr(self, 'start_pos'):
-                delta_x = event.pos().x() - self.start_pos.x()
-                value_range = self.maximum() - self.minimum()
-                slider_width = self.width()
-                
-                if slider_width > 0:
-                    # Convert pixel movement to value change
-                    value_delta = (delta_x / slider_width) * value_range * sensitivity
-                    new_value = self.start_value + value_delta
-                    
-                    # Clamp to range
-                    new_value = max(self.minimum(), min(self.maximum(), new_value))
-                    self.setValue(int(new_value))
-        
-        # Don't call super() to prevent default behavior when using modifiers
-        if not (QApplication.keyboardModifiers() & (Qt.ShiftModifier | Qt.ControlModifier)):
-            super().mouseMoveEvent(event)
-
-class ModifierAwareSpinBox(QDoubleSpinBox):
-    """Custom spinbox with modifier key support"""
+            # Calculate delta
+            delta_x = event.pos().x() - self.drag_start_pos.x()
+            value_delta = delta_x * sensitivity * (self.max_val - self.min_val)
+            new_value = self.drag_start_value + value_delta
+            
+            self.set_value(new_value)
+        super().mouseMoveEvent(event)
     
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.base_step = 0.001
-        self.fine_step = 0.0001  # 10x finer
-        self.coarse_step = 0.01   # 10x coarser
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release"""
+        if event.button() == Qt.LeftButton:
+            self.is_dragging = False
+            self.setCursor(Qt.SizeHorCursor)
+        super().mouseReleaseEvent(event)
+    
+    def mouseDoubleClickEvent(self, event):
+        """Double click to edit manually"""
+        if event.button() == Qt.LeftButton:
+            self.start_editing()
+        super().mouseDoubleClickEvent(event)
+    
+    def start_editing(self):
+        """Start manual text editing"""
+        self.is_editing = True
+        self.line_edit.setText(f"{self.current_val:.{self.decimals}f}")
+        self.line_edit.show()
+        self.line_edit.selectAll()
+        self.line_edit.setFocus()
+        self.update_display()
+    
+    def finish_editing(self):
+        """Finish manual editing"""
+        try:
+            new_value = float(self.line_edit.text())
+            self.set_value(new_value)
+        except ValueError:
+            pass  # Invalid input, ignore
         
+        self.is_editing = False
+        self.line_edit.hide()
+        self.update_display()
+    
+    def line_edit_focus_out(self, event):
+        """Handle line edit losing focus"""
+        QLineEdit.focusOutEvent(self.line_edit, event)
+        self.finish_editing()
+    
     def wheelEvent(self, event):
-        """Handle mouse wheel with modifier support"""
+        """Handle mouse wheel"""
         modifiers = QApplication.keyboardModifiers()
         
-        # Store original step
-        original_step = self.singleStep()
-        
-        # Set step based on modifiers
+        # Determine step size
         if modifiers & Qt.ShiftModifier:
-            self.setSingleStep(self.fine_step)
+            step = 0.001  # Fine
         elif modifiers & Qt.ControlModifier:
-            self.setSingleStep(self.coarse_step)
+            step = 0.01   # Coarse
         else:
-            self.setSingleStep(self.base_step)
+            step = 0.01   # Normal
         
-        # Call parent wheel event
-        super().wheelEvent(event)
+        # Apply wheel direction
+        delta = event.angleDelta().y()
+        if delta > 0:
+            self.set_value(self.current_val + step)
+        else:
+            self.set_value(self.current_val - step)
         
-        # Restore original step
-        self.setSingleStep(original_step)
+        event.accept()
     
     def keyPressEvent(self, event):
-        """Handle arrow keys with modifiers"""
-        if event.key() in (Qt.Key_Up, Qt.Key_Down):
+        """Handle keyboard input"""
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
+            self.start_editing()
+        elif event.key() in (Qt.Key_Left, Qt.Key_Right):
+            # Arrow key adjustment
             modifiers = QApplication.keyboardModifiers()
-            
-            # Store original step
-            original_step = self.singleStep()
-            
-            # Set step based on modifiers
             if modifiers & Qt.ShiftModifier:
-                self.setSingleStep(self.fine_step)
+                step = 0.001
             elif modifiers & Qt.ControlModifier:
-                self.setSingleStep(self.coarse_step)
+                step = 0.01
             else:
-                self.setSingleStep(self.base_step)
+                step = 0.01
             
-            # Call parent key event
-            super().keyPressEvent(event)
-            
-            # Restore original step
-            self.setSingleStep(original_step)
+            if event.key() == Qt.Key_Right:
+                self.set_value(self.current_val + step)
+            else:
+                self.set_value(self.current_val - step)
         else:
             super().keyPressEvent(event)
 
@@ -186,11 +250,9 @@ class ParameterSlider(QWidget):
         super().__init__(parent)
         self.param_name = param_name
         self.default_val = current_val
-        self.original_value = current_val  # Store for conflict resolution
+        self.original_value = current_val
         self.min_val = min_val
         self.max_val = max_val
-        self.is_dragging = False
-        self.last_mouse_pos = None
         
         # Use a splitter for resizable columns
         self.splitter = QSplitter(Qt.Horizontal)
@@ -200,7 +262,7 @@ class ParameterSlider(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.splitter)
         
-        # Parameter name widget (with minimum width and text eliding)
+        # Parameter name widget
         name_widget = QWidget()
         name_layout = QHBoxLayout(name_widget)
         name_layout.setContentsMargins(5, 0, 5, 0)
@@ -209,43 +271,26 @@ class ParameterSlider(QWidget):
         self.label.setMinimumWidth(80)
         self.label.setMaximumWidth(200)
         self.label.setObjectName("ParamLabel")
-        self.label.setToolTip(param_name)  # Show full name on hover
-        # Enable text eliding for long names
+        self.label.setToolTip(param_name)
         self.label.setWordWrap(False)
         self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         
         name_layout.addWidget(self.label)
         name_layout.addStretch()
         
-        # Slider widget
-        slider_widget = QWidget()
-        slider_layout = QHBoxLayout(slider_widget)
-        slider_layout.setContentsMargins(5, 0, 5, 0)
+        # Spacer widget (where old slider was)
+        spacer_widget = QWidget()
+        spacer_widget.setMinimumWidth(100)
         
-        self.slider = ModifierAwareSlider(Qt.Horizontal)
-        self.slider.setMinimum(int(min_val * 1000))
-        self.slider.setMaximum(int(max_val * 1000))
-        self.slider.setValue(int(current_val * 1000))
-        self.slider.valueChanged.connect(self.on_slider_changed)
-        self.slider.setMinimumWidth(100)
-        
-        slider_layout.addWidget(self.slider)
-        
-        # Value input widget
+        # Value drag box widget
         value_widget = QWidget()
         value_layout = QHBoxLayout(value_widget)
         value_layout.setContentsMargins(5, 0, 5, 0)
         
-        self.value_input = ModifierAwareSpinBox()
-        self.value_input.setMinimum(min_val)
-        self.value_input.setMaximum(max_val)
-        self.value_input.setValue(current_val)
-        self.value_input.setDecimals(3)
-        self.value_input.setSingleStep(0.001)
-        self.value_input.setFixedWidth(80)
-        self.value_input.valueChanged.connect(self.on_input_changed)
+        self.value_box = DragValueBox(min_val, max_val, current_val, 3)
+        self.value_box.value_changed.connect(self.on_value_changed)
         
-        value_layout.addWidget(self.value_input)
+        value_layout.addWidget(self.value_box)
         
         # Reset button widget
         reset_widget = QWidget()
@@ -261,77 +306,38 @@ class ParameterSlider(QWidget):
         
         # Add widgets to splitter
         self.splitter.addWidget(name_widget)
-        self.splitter.addWidget(slider_widget)
+        self.splitter.addWidget(spacer_widget)
         self.splitter.addWidget(value_widget)
         self.splitter.addWidget(reset_widget)
         
-        # Set splitter proportions: name gets more space, others fixed-ish
-        self.splitter.setStretchFactor(0, 3)  # Name column - expandable
-        self.splitter.setStretchFactor(1, 4)  # Slider column - most space
-        self.splitter.setStretchFactor(2, 1)  # Value column - fixed-ish
-        self.splitter.setStretchFactor(3, 0)  # Reset column - fixed
+        # Set splitter proportions
+        self.splitter.setStretchFactor(0, 3)  # Name column
+        self.splitter.setStretchFactor(1, 4)  # Spacer (old slider area)
+        self.splitter.setStretchFactor(2, 1)  # Value box
+        self.splitter.setStretchFactor(3, 0)  # Reset button
         
         # Set initial sizes
         self.splitter.setSizes([120, 200, 80, 30])
         
-        # Add tooltip with modifier key info
+        # Enhanced tooltip
         tooltip_text = (f"{param_name}\n\n"
-                       "💡 Modifier Keys:\n"
+                       "💡 Drag to change value\n"
                        "• Normal: Regular speed\n" 
                        "• Shift: Fine control (5x slower)\n"
-                       "• Ctrl: Coarse control (5x faster)\n\n"
-                       "Works with: Mouse drag, wheel, arrow keys")
-        self.slider.setToolTip(tooltip_text)
-        self.value_input.setToolTip(tooltip_text)
+                       "• Ctrl: Coarse control (5x faster)\n"
+                       "• Double-click: Manual input\n"
+                       "• Mouse wheel: Adjust value")
+        self.value_box.setToolTip(tooltip_text)
         
-    def on_slider_changed(self, value):
-        float_val = value / 1000.0
-        self.value_input.blockSignals(True)
-        self.value_input.setValue(float_val)
-        self.value_input.blockSignals(False)
-        self.value_changed.emit(self.param_name, float_val)
-        
-    def on_input_changed(self, value):
-        self.slider.blockSignals(True)
-        self.slider.setValue(int(value * 1000))
-        self.slider.blockSignals(False)
+    def on_value_changed(self, value):
         self.value_changed.emit(self.param_name, value)
         
     def set_value(self, value):
-        self.slider.setValue(int(value * 1000))
-        self.value_input.setValue(value)
+        self.value_box.set_value(value)
         
     def reset_to_original(self):
         """Reset to the value when parameter was first loaded"""
         self.set_value(self.original_value)
-    
-    def keyPressEvent(self, event):
-        """Handle keyboard shortcuts for fine control"""
-        if event.key() in (Qt.Key_Left, Qt.Key_Right):
-            modifiers = QApplication.keyboardModifiers()
-            
-            # Determine step size
-            if modifiers & Qt.ShiftModifier:
-                step = 0.1  # Fine
-            elif modifiers & Qt.ControlModifier:
-                step = 10.0  # Coarse
-            else:
-                step = 1.0   # Normal
-            
-            # Apply step
-            current = self.slider.value()
-            if event.key() == Qt.Key_Right:
-                new_value = current + step
-            else:
-                new_value = current - step
-            
-            # Clamp and set
-            new_value = max(self.slider.minimum(), min(self.slider.maximum(), new_value))
-            self.slider.setValue(int(new_value))
-            
-            event.accept()
-        else:
-            super().keyPressEvent(event)
 
 class ColorPicker(QWidget):
     color_changed = Signal(str, QColor)
@@ -402,8 +408,8 @@ class MaterialInstanceEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Material Instance Editor")
-        self.setMinimumSize(420, 500)  # Set minimum size instead of fixed
-        self.resize(500, 700)  # Default size, but resizable
+        self.setMinimumSize(420, 500)
+        self.resize(500, 700)
         
         # Data
         self.current_materials = []
@@ -413,14 +419,13 @@ class MaterialInstanceEditor(QWidget):
         self.is_master_material = False
         self.master_warnings_disabled = set()
         
-        # Remove transparency and frameless flags to fix rendering issues
         self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
         
         self.init_ui()
         self.apply_styles()
         
     def init_ui(self):
-        # Main layout - no need for container widget now
+        # Main layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
@@ -456,8 +461,6 @@ class MaterialInstanceEditor(QWidget):
         self.params_layout = QVBoxLayout(self.params_widget)
         self.params_layout.setContentsMargins(5, 5, 5, 5)
         self.params_layout.setSpacing(5)
-        
-        # Add stretch at bottom to push everything up
         self.params_layout.addStretch()
         
         scroll.setWidget(self.params_widget)
@@ -596,7 +599,6 @@ class MaterialInstanceEditor(QWidget):
             return None
             
         # Check material for triplanar indicators (world-aligned functions)
-        # This is a simplified check - in practice you'd analyze the material graph
         material_name = parent_material.get_name().lower()
         
         # UV scale conflicts with triplanar
@@ -1037,7 +1039,7 @@ class MaterialInstanceEditor(QWidget):
             }
             
             #SectionHeader:checked {
-                background-color: #0078d4;
+                background-color: #0d3c87;
             }
             
             #ParamLabel {
@@ -1069,38 +1071,7 @@ class MaterialInstanceEditor(QWidget):
             }
             
             QSplitter::handle:hover {
-                background-color: #0078d4;
-            }
-            
-            QSlider::groove:horizontal {
-                height: 6px;
-                background: #3c3c3c;
-                border-radius: 3px;
-            }
-            
-            QSlider::handle:horizontal {
-                background: #0078d4;
-                border: 1px solid #005499;
-                width: 14px;
-                margin: -4px 0;
-                border-radius: 7px;
-            }
-            
-            QSlider::handle:horizontal:hover {
-                background: #1a8cff;
-            }
-            
-            QDoubleSpinBox {
-                background-color: #3c3c3c;
-                border: 1px solid #555;
-                border-radius: 3px;
-                padding: 2px 4px;
-                color: #ffffff;
-                font-size: 10px;
-            }
-            
-            QDoubleSpinBox:focus {
-                border-color: #0078d4;
+                background-color: #0d3c87;
             }
             
             #ResetButton {
@@ -1117,8 +1088,8 @@ class MaterialInstanceEditor(QWidget):
             }
             
             #ActionButton {
-                background-color: #0078d4;
-                border: 1px solid #005499;
+                background-color: #0d3c87;
+                border: 1px solid #0a2d65;
                 border-radius: 4px;
                 color: white;
                 padding: 6px 12px;
@@ -1127,7 +1098,7 @@ class MaterialInstanceEditor(QWidget):
             }
             
             #ActionButton:hover {
-                background-color: #1a8cff;
+                background-color: #1048a0;
             }
             
             QScrollBar:vertical {
@@ -1238,4 +1209,3 @@ def show_material_editor():
     editor_module = reload_material_editor()
     if editor_module:
         editor_module.show_editor_for_selection()
-
