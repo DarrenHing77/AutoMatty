@@ -867,3 +867,91 @@ class AutoMattyUtils:
 
 # Auto-setup
 MenuManager.register_menus()
+
+
+# ADD THIS TO automatty_config.py FOR DEBUGGING
+
+def debug_widget_loading():
+    """Debug why settings aren't loading into widget"""
+    
+    # 1. Check if JSON file exists and has data
+    config_path = AutoMattyConfig.get_config_path()
+    unreal.log(f"🔍 Config path: {config_path}")
+    
+    import os
+    if os.path.exists(config_path):
+        unreal.log(f"✅ Config file exists")
+        config = AutoMattyConfig.load_config()
+        unreal.log(f"📄 Config contents: {config}")
+    else:
+        unreal.log(f"❌ Config file doesn't exist")
+        return
+    
+    # 2. Check if widget can be found
+    widget = WidgetManager.get_widget()
+    if widget:
+        unreal.log(f"✅ Widget found: {widget}")
+    else:
+        unreal.log(f"❌ Widget NOT found")
+        return
+    
+    # 3. Check if widget properties exist
+    for setting_key, config_info in SETTINGS_CONFIG.items():
+        widget_property = config_info.get("widget_property")
+        unreal.log(f"🔍 Checking property: {widget_property}")
+        
+        try:
+            input_widget = widget.get_editor_property(widget_property)
+            if input_widget:
+                unreal.log(f"✅ Found widget property: {widget_property}")
+                current_text = input_widget.get_text()
+                unreal.log(f"📝 Current text: '{current_text}'")
+            else:
+                unreal.log(f"❌ Widget property NOT found: {widget_property}")
+        except Exception as e:
+            unreal.log(f"❌ Error accessing {widget_property}: {e}")
+
+def force_debug_load():
+    """Force load with detailed logging"""
+    unreal.log("🚀 Starting debug load...")
+    
+    # Check JSON values
+    for setting_key in SETTINGS_CONFIG.keys():
+        value = AutoMattyConfig.get_setting(setting_key)
+        unreal.log(f"📊 {setting_key}: '{value}'")
+    
+    # Try to load
+    debug_widget_loading()
+    
+    # Try manual load for ALL fields
+    unreal.log("🔧 Attempting manual load...")
+    widget = WidgetManager.get_widget()
+    if widget:
+        # Test each field individually
+        test_fields = [
+            ("material_path", "MaterialPathInput"),
+            ("texture_path", "TexturePathInput"), 
+            ("material_prefix", "MaterialPrefixInput")
+        ]
+        
+        for setting_key, widget_property in test_fields:
+            try:
+                value = AutoMattyConfig.get_setting(setting_key)
+                input_widget = widget.get_editor_property(widget_property)
+                
+                unreal.log(f"🔍 {setting_key}: value='{value}', widget={input_widget}")
+                
+                if input_widget and value:
+                    input_widget.set_text(str(value))
+                    # Verify it was set
+                    new_text = input_widget.get_text()
+                    unreal.log(f"✅ Set {widget_property}: '{value}' → result: '{new_text}'")
+                else:
+                    unreal.log(f"❌ Failed {widget_property} - widget: {input_widget}, value: '{value}'")
+                    
+            except Exception as e:
+                unreal.log(f"❌ Error setting {setting_key}: {e}")
+
+# USE THIS IN YOUR WIDGET CONSTRUCT:
+# import automatty_config
+# automatty_config.force_debug_load()

@@ -3,7 +3,7 @@ import automatty_utils
 import unreal
 import os
 import sys
-
+import automatty_config
 
 
 # Then import config
