@@ -569,6 +569,215 @@ def ui_get_current_hotkey():
 def ui_set_hotkey(hotkey):
     return AutoMattyConfig.set_setting("hotkey", hotkey.strip().upper())
 
+# ADD THESE FUNCTIONS TO automatty_config.py
+
+# ========================================
+# DIRECT UI TEXT HANDLING - NO FORMAT TEXT NODE NEEDED
+# ========================================
+
+def handle_material_path_changed(text_input):
+    """Handle material path text change directly from EUW OnTextCommitted"""
+    clean_path = str(text_input).strip()
+    
+    # Clean up common UE path issues
+    if clean_path.startswith("/All/Game/"):
+        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
+    elif not clean_path.startswith("/Game/") and clean_path:
+        clean_path = f"/Game/{clean_path.lstrip('/')}"
+    
+    # Validate and save
+    if clean_path and AutoMattyConfig.validate_and_create_path(clean_path):
+        AutoMattyConfig.set_setting("material_path", clean_path)
+        unreal.log(f"✅ Material path updated: {clean_path}")
+    elif clean_path:
+        unreal.log_error(f"❌ Invalid material path: {clean_path}")
+    
+    return clean_path
+
+def handle_texture_path_changed(text_input):
+    """Handle texture path text change directly from EUW OnTextCommitted"""
+    clean_path = str(text_input).strip()
+    
+    # Clean up common UE path issues
+    if clean_path.startswith("/All/Game/"):
+        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
+    elif not clean_path.startswith("/Game/") and clean_path:
+        clean_path = f"/Game/{clean_path.lstrip('/')}"
+    
+    # Validate and save
+    if clean_path and AutoMattyConfig.validate_and_create_path(clean_path):
+        AutoMattyConfig.set_setting("texture_path", clean_path)
+        unreal.log(f"✅ Texture path updated: {clean_path}")
+    elif clean_path:
+        unreal.log_error(f"❌ Invalid texture path: {clean_path}")
+    
+    return clean_path
+
+def handle_material_prefix_changed(text_input):
+    """Handle material prefix text change directly from EUW OnTextCommitted"""
+    clean_prefix = str(text_input).strip()
+    
+    if clean_prefix:
+        AutoMattyConfig.set_setting("material_prefix", clean_prefix)
+        unreal.log(f"✅ Material prefix updated: {clean_prefix}")
+    
+    return clean_prefix
+
+def force_load_ui_settings():
+    """Force load all settings into UI - call this when widget opens"""
+    widget = WidgetManager.get_widget()
+    if not widget:
+        unreal.log_error("❌ No widget found for loading settings")
+        return False
+    
+    success_count = 0
+   # ADD THESE FUNCTIONS TO automatty_config.py
+
+# ========================================
+# DIRECT UI TEXT HANDLING - NO FORMAT TEXT NODE NEEDED
+# ========================================
+
+def handle_material_path_changed():
+    """Handle material path text change - reads directly from widget"""
+    widget = WidgetManager.get_widget()
+    if not widget:
+        return
+    
+    # Read text directly from the widget input field
+    input_field = widget.get_editor_property("MaterialPathInput")
+    if not input_field:
+        return
+        
+    clean_path = str(input_field.get_text()).strip()
+    
+    # Clean up common UE path issues
+    if clean_path.startswith("/All/Game/"):
+        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
+    elif not clean_path.startswith("/Game/") and clean_path:
+        clean_path = f"/Game/{clean_path.lstrip('/')}"
+    
+    # Validate and save
+    if clean_path and AutoMattyConfig.validate_and_create_path(clean_path):
+        AutoMattyConfig.set_setting("material_path", clean_path)
+        unreal.log(f"✅ Material path updated: {clean_path}")
+    elif clean_path:
+        unreal.log_error(f"❌ Invalid material path: {clean_path}")
+    
+    return clean_path
+
+def handle_texture_path_changed():
+    """Handle texture path text change - reads directly from widget"""
+    widget = WidgetManager.get_widget()
+    if not widget:
+        return
+    
+    # Read text directly from the widget input field
+    input_field = widget.get_editor_property("TexturePathInput")
+    if not input_field:
+        return
+        
+    clean_path = str(input_field.get_text()).strip()
+    
+    # Clean up common UE path issues
+    if clean_path.startswith("/All/Game/"):
+        clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
+    elif not clean_path.startswith("/Game/") and clean_path:
+        clean_path = f"/Game/{clean_path.lstrip('/')}"
+    
+    # Validate and save
+    if clean_path and AutoMattyConfig.validate_and_create_path(clean_path):
+        AutoMattyConfig.set_setting("texture_path", clean_path)
+        unreal.log(f"✅ Texture path updated: {clean_path}")
+    elif clean_path:
+        unreal.log_error(f"❌ Invalid texture path: {clean_path}")
+    
+    return clean_path
+
+def handle_material_prefix_changed():
+    """Handle material prefix text change - reads directly from widget"""
+    widget = WidgetManager.get_widget()
+    if not widget:
+        return
+    
+    # Read text directly from the widget input field  
+    input_field = widget.get_editor_property("MaterialPrefixInput")
+    if not input_field:
+        return
+        
+    clean_prefix = str(input_field.get_text()).strip()
+    
+    if clean_prefix:
+        AutoMattyConfig.set_setting("material_prefix", clean_prefix)
+        unreal.log(f"✅ Material prefix updated: {clean_prefix}")
+    
+    return clean_prefix
+
+def force_load_ui_settings():
+    """Force load all settings into UI - call this when widget opens"""
+    widget = WidgetManager.get_widget()
+    if not widget:
+        unreal.log_error("❌ No widget found for loading settings")
+        return False
+    
+    success_count = 0
+    
+    # Material Path
+    try:
+        material_path = AutoMattyConfig.get_setting("material_path")
+        material_input = widget.get_editor_property("MaterialPathInput")
+        if material_input and material_path:
+            material_input.set_text(material_path)
+            success_count += 1
+            unreal.log(f"📥 Loaded material path: {material_path}")
+    except Exception as e:
+        unreal.log_warning(f"⚠️ Failed to load material path: {e}")
+    
+    # Texture Path  
+    try:
+        texture_path = AutoMattyConfig.get_setting("texture_path")
+        texture_input = widget.get_editor_property("TexturePathInput")
+        if texture_input and texture_path:
+            texture_input.set_text(texture_path)
+            success_count += 1
+            unreal.log(f"📥 Loaded texture path: {texture_path}")
+    except Exception as e:
+        unreal.log_warning(f"⚠️ Failed to load texture path: {e}")
+    
+    # Material Prefix
+    try:
+        material_prefix = AutoMattyConfig.get_setting("material_prefix")
+        prefix_input = widget.get_editor_property("MaterialPrefixInput")
+        if prefix_input and material_prefix:
+            prefix_input.set_text(material_prefix)
+            success_count += 1
+            unreal.log(f"📥 Loaded material prefix: {material_prefix}")
+    except Exception as e:
+        unreal.log_warning(f"⚠️ Failed to load material prefix: {e}")
+    
+    unreal.log(f"🎯 Force loaded {success_count} UI settings")
+    return success_count > 0
+
+# ========================================
+# WIDGET STARTUP FUNCTION
+# ========================================
+
+def initialize_widget_on_startup():
+    """Call this when the widget first opens to load all settings"""
+    try:
+        # Small delay to ensure widget is fully loaded
+        import time
+        time.sleep(0.1)
+        
+        # Force load all settings
+        force_load_ui_settings()
+        
+        unreal.log("🚀 AutoMatty widget initialized with saved settings")
+        return True
+        
+    except Exception as e:
+        unreal.log_error(f"❌ Widget initialization failed: {e}")
+        return False
+
 # Utility classes for other modules
 class AutoMattyUtils:
     """Utility functions"""
