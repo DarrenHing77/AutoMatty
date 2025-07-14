@@ -12,17 +12,17 @@ from automatty_config import AutoMattyConfig, AutoMattyUtils
 # Material coordinate layouts
 COORD_LAYOUTS = {
     "orm": {
-        "Color": (-1400, -1000),
-        "ORM": (-1400, -800),
-        "Normal": (-1400, -600),
-        "Emission": (-1400, -400),
+        "Color": (-1400, -200),
+        "ORM": (-1400, -500),
+        "Normal": (-1400, -800),
+        "Emission": (-1400, -1100),
     },
     "split": {
         "Color": (-1400, -200),
-        "Roughness": (-1400, -400),
-        "Metallic": (-1400, -500),
-        "Normal": (-1400, -600),
-        "Emission": (-1400, -700),
+        "Roughness": (-1400, -500),
+        "Metallic": (-1400, -800),
+        "Normal": (-1400, -1100),
+        "Emission": (-1400, -1400),
     },
     "environment_simple": {
         "ColorA": (-1600, -200),
