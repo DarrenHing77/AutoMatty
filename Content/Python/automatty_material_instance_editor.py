@@ -1099,13 +1099,13 @@ def get_selected_mesh_materials():
             if isinstance(actor, unreal.StaticMeshActor):
                 mesh_component = actor.get_component_by_class(unreal.StaticMeshComponent)
                 if mesh_component:
-                    static_mesh = mesh_component.get_static_mesh()
+                    static_mesh = mesh_component.static_mesh
                     if static_mesh:
                         mesh_asset_name = static_mesh.get_name()
             else:
                 mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
                 if mesh_component:
-                    skeletal_mesh = mesh_component.get_skeletal_mesh_asset()
+                    skeletal_mesh = mesh_component.skeletal_mesh()
                     if skeletal_mesh:
                         mesh_asset_name = skeletal_mesh.get_name()
             
