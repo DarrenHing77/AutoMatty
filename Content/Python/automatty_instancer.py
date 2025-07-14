@@ -94,6 +94,13 @@ def _create_instance(base_material, textures):
     has_height = "Height" in texture_params
     has_variation = "VariationHeightMap" in texture_params  # NEW - check for texture variation
     is_environment = _is_environment_material(texture_params)
+    # Check for UDIM sets first
+    
+    udim_sets = detect_udim_sets(textures)
+    if udim_sets:
+        unreal.log(f"🗺️ Found {len(udim_sets)} UDIM sets")
+        # Use first texture from each UDIM set for matching
+        textures = [group[0] for group in udim_sets.values()]
     
     if is_environment:
         unreal.log("🌍 Environment material detected")
