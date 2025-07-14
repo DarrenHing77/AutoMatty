@@ -278,11 +278,7 @@ class ParameterSlider(QWidget):
         name_layout.addWidget(self.label)
         name_layout.addStretch()
         
-        # Spacer widget (where old slider was)
-        spacer_widget = QWidget()
-        spacer_widget.setMinimumWidth(100)
-        
-        # Value drag box widget
+        # Value drag box widget (no more spacer)
         value_widget = QWidget()
         value_layout = QHBoxLayout(value_widget)
         value_layout.setContentsMargins(5, 0, 5, 0)
@@ -304,20 +300,18 @@ class ParameterSlider(QWidget):
         
         reset_layout.addWidget(self.reset_btn)
         
-        # Add widgets to splitter
+        # Add widgets to splitter (removed spacer)
         self.splitter.addWidget(name_widget)
-        self.splitter.addWidget(spacer_widget)
         self.splitter.addWidget(value_widget)
         self.splitter.addWidget(reset_widget)
         
-        # Set splitter proportions
-        self.splitter.setStretchFactor(0, 3)  # Name column
-        self.splitter.setStretchFactor(1, 4)  # Spacer (old slider area)
-        self.splitter.setStretchFactor(2, 1)  # Value box
-        self.splitter.setStretchFactor(3, 0)  # Reset button
+        # Set splitter proportions (no spacer)
+        self.splitter.setStretchFactor(0, 4)  # Name column
+        self.splitter.setStretchFactor(1, 1)  # Value box
+        self.splitter.setStretchFactor(2, 0)  # Reset button
         
-        # Set initial sizes
-        self.splitter.setSizes([120, 200, 80, 30])
+        # Set initial sizes (smaller overall)
+        self.splitter.setSizes([160, 80, 30])
         
         # Enhanced tooltip
         tooltip_text = (f"{param_name}\n\n"
@@ -408,8 +402,8 @@ class MaterialInstanceEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Material Instance Editor")
-        self.setMinimumSize(420, 500)
-        self.resize(500, 700)
+        self.setMinimumSize(350, 400)
+        self.resize(400, 600)
         
         # Data
         self.current_materials = []
@@ -683,14 +677,13 @@ class MaterialInstanceEditor(QWidget):
             # Get parameter names from parent material
             scalar_params = unreal.MaterialEditingLibrary.get_scalar_parameter_names(parent_material)
             vector_params = unreal.MaterialEditingLibrary.get_vector_parameter_names(parent_material)
-            texture_params = unreal.MaterialEditingLibrary.get_texture_parameter_names(parent_material)
             
-            # Group parameters by category
-            param_groups = self.group_parameters(scalar_params, vector_params, texture_params)
+            # Group parameters by category (no texture params)
+            param_groups = self.group_parameters(scalar_params, vector_params)
             
             # Create sections and parameters
             for group_name, params in param_groups.items():
-                if params['scalars'] or params['vectors'] or params['textures']:
+                if params['scalars'] or params['vectors']:
                     section = CollapsibleSection(group_name)
                     self.sections[group_name] = section
                     
@@ -727,41 +720,26 @@ class MaterialInstanceEditor(QWidget):
                         except Exception as e:
                             unreal.log_warning(f"⚠️ Failed to load vector parameter {param_name}: {e}")
                     
-                    # Add texture parameters (just show names for now)
-                    for param_name in params['textures']:
-                        try:
-                            if self.is_master_material:
-                                current_texture = unreal.MaterialEditingLibrary.get_material_texture_parameter_value(instance, param_name)
-                            else:
-                                current_texture = unreal.MaterialEditingLibrary.get_material_instance_texture_parameter_value(instance, param_name)
-                            
-                            texture_name = current_texture.get_name() if current_texture else "None"
-                            texture_label = QLabel(f"{str(param_name)}: {texture_name}")
-                            texture_label.setObjectName("TextureLabel")
-                            section.add_widget(texture_label)
-                        except Exception as e:
-                            unreal.log_warning(f"⚠️ Failed to load texture parameter {param_name}: {e}")
-                    
                     # Add section to layout
                     self.params_layout.insertWidget(self.params_layout.count() - 1, section)
             
-            param_count = len(scalar_params) + len(vector_params) + len(texture_params)
-            unreal.log(f"✅ Loaded {param_count} parameters ({len(scalar_params)} scalar, {len(vector_params)} vector, {len(texture_params)} texture)")
+            param_count = len(scalar_params) + len(vector_params)
+            unreal.log(f"✅ Loaded {param_count} parameters ({len(scalar_params)} scalar, {len(vector_params)} vector)")
             
         except Exception as e:
             unreal.log_error(f"❌ Failed to load material parameters: {e}")
     
-    def group_parameters(self, scalar_params, vector_params, texture_params):
+    def group_parameters(self, scalar_params, vector_params):
         """Group parameters by logical categories"""
         groups = {
-            "Color": {"scalars": [], "vectors": [], "textures": []},
-            "Roughness": {"scalars": [], "vectors": [], "textures": []},
-            "Material Properties": {"scalars": [], "vectors": [], "textures": []},
-            "UV Controls": {"scalars": [], "vectors": [], "textures": []},
-            "Displacement": {"scalars": [], "vectors": [], "textures": []},
-            "Environment": {"scalars": [], "vectors": [], "textures": []},
-            "Texture Variation": {"scalars": [], "vectors": [], "textures": []},
-            "Other": {"scalars": [], "vectors": [], "textures": []}
+            "Color": {"scalars": [], "vectors": []},
+            "Roughness": {"scalars": [], "vectors": []},
+            "Material Properties": {"scalars": [], "vectors": []},
+            "UV Controls": {"scalars": [], "vectors": []},
+            "Displacement": {"scalars": [], "vectors": []},
+            "Environment": {"scalars": [], "vectors": []},
+            "Texture Variation": {"scalars": [], "vectors": []},
+            "Other": {"scalars": [], "vectors": []}
         }
         
         # Categorize scalar parameters
@@ -792,40 +770,33 @@ class MaterialInstanceEditor(QWidget):
             else:
                 groups["Other"]["vectors"].append(param)
         
-        # Categorize texture parameters
-        for param in texture_params:
-            param_lower = str(param).lower()
-            if any(word in param_lower for word in ['color', 'albedo', 'diffuse']):
-                groups["Color"]["textures"].append(param)
-            elif any(word in param_lower for word in ['roughness', 'rough']):
-                groups["Roughness"]["textures"].append(param)
-            elif any(word in param_lower for word in ['metal', 'emission']):
-                groups["Material Properties"]["textures"].append(param)
-            elif any(word in param_lower for word in ['height', 'displacement', 'disp']):
-                groups["Displacement"]["textures"].append(param)
-            elif any(word in param_lower for word in ['blend', 'mask', 'mix']):
-                groups["Environment"]["textures"].append(param)
-            elif any(word in param_lower for word in ['variation', 'var']):
-                groups["Texture Variation"]["textures"].append(param)
-            else:
-                groups["Other"]["textures"].append(param)
-        
         return groups
     
     def clear_all_parameters(self):
         """Remove all parameter widgets and sections"""
         self.parameter_widgets.clear()
         
-        # Clear sections
-        for section in self.sections.values():
-            section.deleteLater()
+        # Clear sections safely
+        for section in list(self.sections.values()):
+            if section:
+                try:
+                    section.clear_widgets()
+                    section.deleteLater()
+                except:
+                    pass
         self.sections.clear()
         
-        # Clear layout (except the stretch at the end)
+        # Clear layout safely
         while self.params_layout.count() > 1:
             child = self.params_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+            if child:
+                widget = child.widget()
+                if widget:
+                    try:
+                        widget.setParent(None)
+                        widget.deleteLater()
+                    except:
+                        pass
     
     def on_scalar_parameter_changed(self, param_name, value):
         """Handle parameter changes with master material protection and conflict detection"""
@@ -1055,15 +1026,6 @@ class MaterialInstanceEditor(QWidget):
                 font-family: monospace;
             }
             
-            #TextureLabel {
-                color: #aaaaaa;
-                font-size: 9px;
-                padding: 2px;
-                background-color: #333333;
-                border-radius: 2px;
-                margin: 1px;
-            }
-            
             QSplitter::handle {
                 background-color: #555555;
                 width: 2px;
@@ -1121,6 +1083,7 @@ class MaterialInstanceEditor(QWidget):
 # ========================================
 # UE INTEGRATION FUNCTIONS
 # ========================================
+
 def get_selected_mesh_materials():
     """Get ALL materials (both instances and masters) from selected mesh"""
     editor_actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -1142,7 +1105,7 @@ def get_selected_mesh_materials():
             else:
                 mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
                 if mesh_component:
-                    skeletal_mesh = mesh_component.get_skeletal_mesh()
+                    skeletal_mesh = mesh_component.get_skeletal_mesh_asset()
                     if skeletal_mesh:
                         mesh_asset_name = skeletal_mesh.get_name()
             
