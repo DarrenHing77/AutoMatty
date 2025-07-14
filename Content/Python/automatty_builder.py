@@ -1,28 +1,28 @@
 """
-AutoMatty Material Builder - REFACTORED VERSION
-No more if statement hell - dictionary-driven approach
+AutoMatty Material Builder - COMPLETE FIXED VERSION
+Clean dictionary-driven approach with proper triplanar support
 """
 import unreal
 from automatty_config import AutoMattyConfig, AutoMattyUtils
 
 # ========================================
-# CONFIGURATION DICTIONARIES
+# CONFIGURATION DICTIONARIES - FIXED
 # ========================================
 
-# Material coordinate layouts
+# Material coordinate layouts - FIXED SPACING
 COORD_LAYOUTS = {
     "orm": {
         "Color": (-1400, -200),
-        "ORM": (-1400, -500),
-        "Normal": (-1400, -800),
-        "Emission": (-1400, -1100),
+        "ORM": (-1400, -400),
+        "Normal": (-1400, -600),
+        "Emission": (-1400, -800),
     },
     "split": {
         "Color": (-1400, -200),
-        "Roughness": (-1400, -500),
-        "Metallic": (-1400, -800),
-        "Normal": (-1400, -1100),
-        "Emission": (-1400, -1400),
+        "Roughness": (-1400, -400),
+        "Metallic": (-1400, -600),
+        "Normal": (-1400, -800),
+        "Emission": (-1400, -1000),
     },
     "environment_simple": {
         "ColorA": (-1600, -200),
@@ -68,18 +68,19 @@ MATERIAL_FUNCTIONS = {
     "remap_value": "/Engine/Functions/Engine_MaterialFunctions03/Math/RemapValueRange"
 }
 
-# Control parameter configurations
+# Control parameter configurations - FIXED
 CONTROL_PARAMS = {
     "brightness": {"default": 1.0, "group": "Color", "range": (0.0, 5.0)},
     "color_contrast": {"default": 1.0, "group": "Color", "range": (0.0, 5.0)},
+    "roughness_contrast": {"default": 1.0, "group": "Roughness", "range": (0.0, 5.0)},  # ADDED
     "hue_shift": {"default": 0.0, "group": "Color", "range": (-1.0, 1.0)},
     "roughness_min": {"default": 0.0, "group": "Roughness", "range": (0.0, 1.0)},
     "roughness_max": {"default": 1.0, "group": "Roughness", "range": (0.0, 1.0)},
     "metal_intensity": {"default": 0.0, "group": "Metallic", "range": (0.0, 1.0)},
     "emission_intensity": {"default": 0.0, "group": "Emission", "range": (0.0, 10.0)},
     "displacement_intensity": {"default": 0.1, "group": "Displacement", "range": (0.0, 10.0)},
-    "uv_scale": {"default": 1.0, "group": "UV Controls", "range": (0.01, 100.0)},
-    "mfp_scale": {"default": 1.0, "group": "SSS", "range": (0.0, 10.0)},
+    "scale": {"default": 1.0, "group": "UV Controls", "range": (0.01, 100.0)},  # RENAMED from uv_scale
+    "mfp_scale": {"default": 0.0, "group": "SSS", "range": (0.0, 10.0)},  # CHANGED from 1.0 to 0.0
     "second_roughness": {"default": 0.5, "group": "Roughness", "range": (0.0, 1.0)},
     "second_roughness_weight": {"default": 0.0, "group": "Roughness", "range": (0.0, 1.0)},
     "mix_scale": {"default": 0.001, "group": "Advanced Mixing", "range": (0.0001, 1.0)}
@@ -189,7 +190,7 @@ class SubstrateMaterialBuilder:
         if features.get('use_nanite'):
             self._add_height_coordinates(coords, material_type)
         
-        # Setup UV system (variation + scaling)
+        # Setup UV system (variation + scaling) - FIXED FOR TRIPLANAR
         uv_output = self._setup_uv_system(material, features)
         
         # Create texture samples
@@ -208,45 +209,63 @@ class SubstrateMaterialBuilder:
         elif material_type == "environment_advanced":
             coords.update({"HeightA": (-1800, -600), "HeightB": (-1800, -1100)})
         else:
-            coords["Height"] = (-1400, -800)
+            coords["Height"] = (-1400, -1000)
         
         unreal.log(f"🏔️ Added Height parameters for {material_type} nanite displacement")
     
     # ========================================
-    # UV SYSTEM SETUP
+    # UV SYSTEM SETUP - FIXED FOR TRIPLANAR
     # ========================================
     
     def _setup_uv_system(self, material, features):
-        """Setup UV coordinates with optional scaling and variation"""
-        # Base texture coordinates
-        tex_coords = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -2000, -50)
+        """Setup UV coordinates with optional scaling and variation - FIXED FOR TRIPLANAR"""
         
-        # UV Scale parameter
-        uv_scale_param = self._create_control_parameter(material, "uv_scale", -2000, -100)
-        
-        # Scale the UVs
-        uv_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1900, -75)
-        self.lib.connect_material_expressions(tex_coords, "", uv_multiply, "A")
-        self.lib.connect_material_expressions(uv_scale_param, "", uv_multiply, "B")
-        
-        # Apply texture variation if enabled
-        if features.get('use_tex_var'):
-            return self._setup_texture_variation(material, uv_multiply)
-        
-        return uv_multiply
+        if features.get('use_triplanar'):
+            # For triplanar, use world position instead of texture coordinates
+            world_pos = self.lib.create_material_expression(material, unreal.MaterialExpressionWorldPosition, -2000, -50)
+            
+            # Scale parameter (renamed from uv_scale to just scale)
+            scale_param = self._create_control_parameter(material, "scale", -2000, -100)
+            
+            # Scale the world position
+            scale_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1900, -75)
+            self.lib.connect_material_expressions(world_pos, "", scale_multiply, "A")
+            self.lib.connect_material_expressions(scale_param, "", scale_multiply, "B")
+            
+            # Apply texture variation if enabled
+            if features.get('use_tex_var'):
+                return self._setup_texture_variation(material, scale_multiply)
+            
+            return scale_multiply
+        else:
+            # Standard UV coordinates for non-triplanar
+            tex_coords = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureCoordinate, -2000, -50)
+            
+            # Scale parameter
+            scale_param = self._create_control_parameter(material, "scale", -2000, -100)
+            
+            # Scale the UVs
+            uv_multiply = self.lib.create_material_expression(material, unreal.MaterialExpressionMultiply, -1900, -75)
+            self.lib.connect_material_expressions(tex_coords, "", uv_multiply, "A")
+            self.lib.connect_material_expressions(scale_param, "", uv_multiply, "B")
+            
+            # Apply texture variation if enabled
+            if features.get('use_tex_var'):
+                return self._setup_texture_variation(material, uv_multiply)
+            
+            return uv_multiply
     
     def _setup_texture_variation(self, material, uv_input):
-        """Setup texture variation system"""
+        """Setup texture variation system - FIXED"""
         unreal.log(f"🎲 Setting up texture variation system")
         
-        # Variation height map parameter
-        var_height_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -1900, -150)
+        # Variation height map parameter - FIXED: use texture object instead of texture sample
+        var_height_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, -1900, -150)
         var_height_param.set_editor_property("parameter_name", "VariationHeightMap")
-        var_height_param.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
         var_height_param.set_editor_property("group", "Texture Variation")
         
-        # Random rotation/scale switch
-        random_switch = self.lib.create_material_expression(material, unreal.MaterialExpressionStaticSwitchParameter, -1900, -200)
+        # Random rotation/scale switch - FIXED: use StaticBoolParameter instead of StaticSwitchParameter
+        random_switch = self.lib.create_material_expression(material, unreal.MaterialExpressionStaticBoolParameter, -1900, -200)
         random_switch.set_editor_property("parameter_name", "RandomRotationScale")
         random_switch.set_editor_property("default_value", True)
         random_switch.set_editor_property("group", "Texture Variation")
@@ -265,7 +284,7 @@ class SubstrateMaterialBuilder:
             return uv_input
     
     # ========================================
-    # TEXTURE SAMPLE CREATION
+    # TEXTURE SAMPLE CREATION - FIXED FOR TRIPLANAR
     # ========================================
     
     def _create_texture_samples(self, material, coords, features, uv_output):
@@ -281,7 +300,7 @@ class SubstrateMaterialBuilder:
         return samples
     
     def _create_triplanar_sample(self, material, param_name, x, y, uv_output):
-        """Create triplanar texture sample"""
+        """Create triplanar texture sample - FIXED"""
         # Texture object parameter
         texture_param = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureObjectParameter, x - 200, y)
         texture_param.set_editor_property("parameter_name", param_name)
@@ -293,8 +312,9 @@ class SubstrateMaterialBuilder:
         
         if world_align_func:
             self.lib.connect_material_expressions(texture_param, "", world_align_func, "TextureObject")
+            # FIXED: Connect world position to WorldPosition pin
             if uv_output:
-                self.lib.connect_material_expressions(uv_output, "", world_align_func, "UVs")
+                self.lib.connect_material_expressions(uv_output, "", world_align_func, "WorldPosition")
             
             emoji = "🏔️" if "Height" in param_name else "🔺"
             unreal.log(f"{emoji} Triplanar setup: {param_name}")
@@ -342,7 +362,7 @@ class SubstrateMaterialBuilder:
         # Color processing chain
         color_final = self._build_color_chain(material, samples, material_type)
         
-        # Roughness processing
+        # Roughness processing - FIXED: added contrast control
         roughness_final = self._build_roughness_chain(material, samples, material_type, features)
         
         # Metallic processing
@@ -360,7 +380,7 @@ class SubstrateMaterialBuilder:
         # Displacement (nanite)
         displacement_final = self._build_displacement_chain(material, samples, features)
         
-        # Create and connect substrate slab
+        # Create and connect substrate slab - FIXED SPACING
         self._create_substrate_slab(material, {
             "diffuse": color_final,
             "roughness": roughness_final,
@@ -400,7 +420,7 @@ class SubstrateMaterialBuilder:
         return color_power
     
     def _build_roughness_chain(self, material, samples, material_type, features):
-        """Build roughness processing chain"""
+        """Build roughness processing chain - FIXED: added contrast control"""
         # Get roughness input
         if material_type == "orm":
             rough_mask = self.lib.create_material_expression(material, unreal.MaterialExpressionComponentMask, -1100, -350)
@@ -413,18 +433,24 @@ class SubstrateMaterialBuilder:
         else:
             roughness_input = samples["Roughness"]
         
+        # Roughness contrast - NEW
+        rough_contrast_param = self._create_control_parameter(material, "roughness_contrast", -1100, -400)
+        rough_contrast = self.lib.create_material_expression(material, unreal.MaterialExpressionPower, -900, -400)
+        self._connect_sample(roughness_input, rough_contrast, "Base")
+        self.lib.connect_material_expressions(rough_contrast_param, "", rough_contrast, "Exp")
+        
         # Remap roughness range
         rough_min = self._create_control_parameter(material, "roughness_min", -1100, -450)
         rough_max = self._create_control_parameter(material, "roughness_max", -1100, -500)
         
-        remap_rough = self._create_material_function(material, "remap_value", -700, -400)
+        remap_rough = self._create_material_function(material, "remap_value", -700, -450)
         if remap_rough:
-            self._connect_sample(roughness_input, remap_rough, "Input")
+            self.lib.connect_material_expressions(rough_contrast, "", remap_rough, "Input")
             self.lib.connect_material_expressions(rough_min, "", remap_rough, "Target Low")
             self.lib.connect_material_expressions(rough_max, "", remap_rough, "Target High")
             return remap_rough
         
-        return roughness_input
+        return rough_contrast
     
     def _build_metallic_chain(self, material, samples, material_type):
         """Build metallic processing chain"""
@@ -557,7 +583,7 @@ class SubstrateMaterialBuilder:
             self.lib.connect_material_expressions(displacement_intensity, "", displacement_multiply, "B")
             displacement_final = displacement_multiply
         
-        # Create substrate slab
+        # Create substrate slab - FIXED SPACING
         self._create_substrate_slab(material, {
             "diffuse": brightness_multiply,
             "normal": lerps.get("normal"),
@@ -607,7 +633,7 @@ class SubstrateMaterialBuilder:
         self.lib.connect_material_expressions(slab_b, "", substrate_mix, "Foreground")
         self.lib.connect_material_expressions(mixing_pattern, "", substrate_mix, "Mix")
         
-        # Connect to material output
+        # Connect to material output - FIXED SPACING
         self.lib.connect_material_property(substrate_mix, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
         
         # Connect displacement
@@ -639,12 +665,12 @@ class SubstrateMaterialBuilder:
         return frac_node
     
     # ========================================
-    # SUBSTRATE SLAB CREATION
+    # SUBSTRATE SLAB CREATION - FIXED SPACING
     # ========================================
     
     def _create_substrate_slab(self, material, connections, features):
-        """Create and connect substrate slab"""
-        slab = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -200, -400)
+        """Create and connect substrate slab - FIXED: better spacing to avoid overlap"""
+        slab = self.lib.create_material_expression(material, unreal.MaterialExpressionSubstrateSlabBSDF, -400, -400)
         
         # Connect inputs
         connection_map = {
@@ -668,12 +694,12 @@ class SubstrateMaterialBuilder:
         
         # Connect second roughness
         if features.get('use_second_roughness'):
-            second_rough = self._create_control_parameter(material, "second_roughness", -500, -450)
-            second_weight = self._create_control_parameter(material, "second_roughness_weight", -500, -500)
+            second_rough = self._create_control_parameter(material, "second_roughness", -700, -450)
+            second_weight = self._create_control_parameter(material, "second_roughness_weight", -700, -500)
             self.lib.connect_material_expressions(second_rough, "", slab, "Second Roughness")
             self.lib.connect_material_expressions(second_weight, "", slab, "Second Roughness Weight")
         
-        # Connect to output
+        # Connect to output - FIXED: more spacing to avoid overlap
         self.lib.connect_material_property(slab, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
         
         # Connect displacement

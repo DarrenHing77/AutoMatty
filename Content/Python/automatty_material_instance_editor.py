@@ -1,6 +1,6 @@
 """
-AutoMatty Material Instance Editor - VISUAL OVERHAUL
-Drag-value boxes with progress bar fills and #0d3c87 color scheme
+AutoMatty Material Instance Editor - COMPLETE FIXED VERSION
+Removed max value clamps - users can input any value beyond expected ranges
 """
 
 import unreal_qt
@@ -15,13 +15,13 @@ from PySide6.QtGui import *
 material_editor_widget = None
 
 class DragValueBox(QWidget):
-    """Custom drag-value box with progress bar fill"""
+    """Custom drag-value box with progress bar fill - FIXED: No max clamps"""
     value_changed = Signal(float)
     
     def __init__(self, min_val=0.0, max_val=1.0, current_val=0.5, decimals=3, parent=None):
         super().__init__(parent)
         self.min_val = min_val
-        self.max_val = max_val
+        self.max_val = max_val  # Keep for progress bar calculation, but don't clamp to it
         self.current_val = current_val
         self.decimals = decimals
         self.is_dragging = False
@@ -50,14 +50,17 @@ class DragValueBox(QWidget):
         self.update_display()
     
     def get_progress(self):
-        """Get progress as 0-1 value"""
+        """Get progress as 0-1 value - clamp only for visual progress bar"""
         if self.max_val == self.min_val:
             return 0.0
-        return (self.current_val - self.min_val) / (self.max_val - self.min_val)
+        # Clamp ONLY for progress bar visualization, not for actual value
+        clamped_val = max(self.min_val, min(self.max_val, self.current_val))
+        return (clamped_val - self.min_val) / (self.max_val - self.min_val)
     
     def set_value(self, value):
-        """Set value and update display"""
-        self.current_val = max(self.min_val, min(self.max_val, value))
+        """Set value and update display - FIXED: Only clamp to min, no max clamp"""
+        # Only enforce minimum value, let users go above max if they want
+        self.current_val = max(self.min_val, value)
         self.update_display()
         self.value_changed.emit(self.current_val)
     
@@ -76,16 +79,19 @@ class DragValueBox(QWidget):
         bg_color = QColor("#3c3c3c" if not self.is_editing else "#4a4a4a")
         painter.fillRect(rect, bg_color)
         
-        # Progress fill
+        # Progress fill - only show if value is within expected range
         progress = self.get_progress()
-        if progress > 0:
+        if progress > 0 and self.current_val <= self.max_val:
             fill_width = int(rect.width() * progress)
             fill_rect = QRect(0, 0, fill_width, rect.height())
             fill_color = QColor("#0d3c87")  # Your custom blue
             painter.fillRect(fill_rect, fill_color)
         
-        # Border
-        border_color = QColor("#0d3c87" if self.hasFocus() else "#555")
+        # Border - different color if value exceeds expected max
+        if self.current_val > self.max_val:
+            border_color = QColor("#ff6600")  # Orange for values above expected range
+        else:
+            border_color = QColor("#0d3c87" if self.hasFocus() else "#555")
         painter.setPen(QPen(border_color, 1))
         painter.drawRect(rect.adjusted(0, 0, -1, -1))
         
@@ -116,9 +122,10 @@ class DragValueBox(QWidget):
             else:
                 sensitivity = self.base_sensitivity
             
-            # Calculate delta
+            # Calculate delta - use a larger range for calculation
+            range_size = max(self.max_val - self.min_val, 10.0)  # Ensure reasonable sensitivity
             delta_x = event.pos().x() - self.drag_start_pos.x()
-            value_delta = delta_x * sensitivity * (self.max_val - self.min_val)
+            value_delta = delta_x * sensitivity * range_size
             new_value = self.drag_start_value + value_delta
             
             self.set_value(new_value)
@@ -313,14 +320,15 @@ class ParameterSlider(QWidget):
         # Set initial sizes (smaller overall)
         self.splitter.setSizes([160, 80, 30])
         
-        # Enhanced tooltip
+        # Enhanced tooltip - UPDATED
         tooltip_text = (f"{param_name}\n\n"
                        "💡 Drag to change value\n"
                        "• Normal: Regular speed\n" 
                        "• Shift: Fine control (5x slower)\n"
                        "• Ctrl: Coarse control (5x faster)\n"
                        "• Double-click: Manual input\n"
-                       "• Mouse wheel: Adjust value")
+                       "• Mouse wheel: Adjust value\n"
+                       "• No maximum limit - enter any value!")
         self.value_box.setToolTip(tooltip_text)
         
     def on_value_changed(self, value):
@@ -479,12 +487,16 @@ class MaterialInstanceEditor(QWidget):
         layout.addLayout(button_layout)
         
     def get_smart_parameter_range(self, param_name):
-        """Get appropriate min/max values based on parameter type"""
+        """Get appropriate min/max values based on parameter type - FIXED: More liberal ranges"""
         param_lower = param_name.lower()
         
-        # UV Scale and tiling parameters - much higher range
-        if any(word in param_lower for word in ['scale', 'tiling', 'uvscale', 'tile']):
-            return 0.01, 100.0
+        # MFP scale - specific case before general scale check
+        if 'mfp' in param_lower and 'scale' in param_lower:
+            return 0.0, 10.0
+            
+        # UV Scale and tiling parameters - much higher range, no restrictive max
+        elif any(word in param_lower for word in ['scale', 'tiling', 'uvscale', 'tile']):
+            return 0.01, 100.0  # Still provide range for UI, but no clamping
             
         # Displacement intensity - moderate range
         elif any(word in param_lower for word in ['displacement', 'height', 'disp']):
@@ -695,7 +707,7 @@ class MaterialInstanceEditor(QWidget):
                             else:
                                 current_value = unreal.MaterialEditingLibrary.get_material_instance_scalar_parameter_value(instance, param_name)
                             
-                            # Get smart range for this parameter
+                            # Get smart range for this parameter - ranges are for UI only, no clamping
                             min_val, max_val = self.get_smart_parameter_range(str(param_name))
                             
                             slider = ParameterSlider(str(param_name), min_val, max_val, current_value)
@@ -1105,7 +1117,7 @@ def get_selected_mesh_materials():
             else:
                 mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
                 if mesh_component:
-                    skeletal_mesh = mesh_component.skeletal_mesh()
+                    skeletal_mesh = mesh_component.skeletal_mesh
                     if skeletal_mesh:
                         mesh_asset_name = skeletal_mesh.get_name()
             
@@ -1164,7 +1176,7 @@ def show_editor_for_selection():
     material_editor_widget.load_materials(materials)
     material_editor_widget.show()
     
-    unreal.log(f"🎉 Material Editor opened with {len(materials)} materials")
+    unreal.log(f"🎉 Material Editor opened with {len(materials)} materials - NO MAX CLAMPS!")
 
 def reload_material_editor():
     """Hot-reload the material editor without restarting UE"""
