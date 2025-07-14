@@ -1121,7 +1121,6 @@ class MaterialInstanceEditor(QWidget):
 # ========================================
 # UE INTEGRATION FUNCTIONS
 # ========================================
-
 def get_selected_mesh_materials():
     """Get ALL materials (both instances and masters) from selected mesh"""
     editor_actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -1132,14 +1131,26 @@ def get_selected_mesh_materials():
     for actor in selected_actors:
         if isinstance(actor, (unreal.StaticMeshActor, unreal.SkeletalMeshActor)):
             mesh_component = None
+            mesh_asset_name = "Unknown"
             
             if isinstance(actor, unreal.StaticMeshActor):
                 mesh_component = actor.get_component_by_class(unreal.StaticMeshComponent)
+                if mesh_component:
+                    static_mesh = mesh_component.get_static_mesh()
+                    if static_mesh:
+                        mesh_asset_name = static_mesh.get_name()
             else:
                 mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
+                if mesh_component:
+                    skeletal_mesh = mesh_component.get_skeletal_mesh()
+                    if skeletal_mesh:
+                        mesh_asset_name = skeletal_mesh.get_name()
             
             if mesh_component:
                 num_materials = mesh_component.get_num_materials()
+                
+                # Create a display name that shows the asset name and instance info
+                actor_display_name = f"{mesh_asset_name} (instance)"
                 
                 for i in range(num_materials):
                     material = mesh_component.get_material(i)
@@ -1152,7 +1163,7 @@ def get_selected_mesh_materials():
                             'name': material.get_name(),
                             'instance': material,
                             'slot': i,
-                            'actor': actor.get_name(),
+                            'actor': actor_display_name,
                             'type': material_type
                         })
     
