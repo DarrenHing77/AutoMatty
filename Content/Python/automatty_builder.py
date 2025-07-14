@@ -3,7 +3,8 @@ AutoMatty Material Builder - REFACTORED VERSION
 No more if statement hell - dictionary-driven approach
 """
 import unreal
-from automatty_config import AutoMattyConfig, AutoMattyUtils
+from automatty_config import AutoMattyConfig
+from automatty_utils import AutoMattyUtils
 
 # ========================================
 # CONFIGURATION DICTIONARIES
