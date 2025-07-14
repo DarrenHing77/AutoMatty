@@ -809,7 +809,7 @@ class AutoMattyUtils:
     @staticmethod
     def find_default_normal():
         for path in unreal.EditorAssetLibrary.list_assets("/Engine", recursive=True, include_folder=False):
-            if path.lower().endswith("defaultnormal"):
+            if path.lower().endswith("DefaultNormal"):
                 return unreal.EditorAssetLibrary.load_asset(path)
         return None
     

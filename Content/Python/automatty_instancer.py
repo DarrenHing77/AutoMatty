@@ -96,18 +96,18 @@ def _create_instance(base_material, textures):
     is_environment = _is_environment_material(texture_params)
     # Check for UDIM sets first
     
-    udim_sets = detect_udim_sets(textures)
-    if udim_sets:
-        unreal.log(f"🗺️ Found {len(udim_sets)} UDIM sets")
-        # Use first texture from each UDIM set for matching
-        textures = [group[0] for group in udim_sets.values()]
-    
-    if is_environment:
-        unreal.log("🌍 Environment material detected")
-    if has_height:
-        unreal.log("🏔️ Height displacement supported")
-    if has_variation:
-        unreal.log("🎲 Texture variation supported")
+    #udim_sets = detect_udim_sets(textures)
+    #if udim_sets:
+    #    unreal.log(f"🗺️ Found {len(udim_sets)} UDIM sets")
+    #    # Use first texture from each UDIM set for matching
+    #    textures = [group[0] for group in udim_sets.values()]
+    #
+    #if is_environment:
+    #    unreal.log("🌍 Environment material detected")
+    #if has_height:
+    #    unreal.log("🏔️ Height displacement supported")
+    #if has_variation:
+    #    unreal.log("🎲 Texture variation supported")
     
     # Match textures to parameters
     matched_textures = _match_textures(textures, has_height, is_environment, has_variation)
