@@ -57,7 +57,7 @@ class DragValueBox(QWidget):
     
     def set_value(self, value):
         """Set value and update display"""
-        self.current_val = max(self.min_val, min(self.max_val, value))
+        self.current_val = value  # No clamping - allow values beyond slider range
         self.update_display()
         self.value_changed.emit(self.current_val)
     
@@ -79,9 +79,17 @@ class DragValueBox(QWidget):
         # Progress fill
         progress = self.get_progress()
         if progress > 0:
-            fill_width = int(rect.width() * progress)
+            fill_width = int(rect.width() * min(progress, 1.0))  # Cap visual fill at 100%
             fill_rect = QRect(0, 0, fill_width, rect.height())
-            fill_color = QColor("#0d3c87")  # Your custom blue
+            
+            # Change color based on value range
+            if self.current_val > self.max_val:
+                fill_color = QColor("#ff6600")  # Orange for over-range
+            elif self.current_val < self.min_val:
+                fill_color = QColor("#cc00ff")  # Purple for under-range  
+            else:
+                fill_color = QColor("#0d3c87")  # Normal blue
+                
             painter.fillRect(fill_rect, fill_color)
         
         # Border
@@ -482,6 +490,81 @@ class ColorPicker(QWidget):
         self.update_color_button()
         self.color_changed.emit(self.param_name, self.current_color)
 
+class SwitchParameter(QWidget):
+    switch_changed = Signal(str, bool)
+    override_changed = Signal(str, bool)
+    
+    def __init__(self, param_name, current_value=False, is_overridden=True, parent=None):
+        super().__init__(parent)
+        self.param_name = param_name
+        self.current_value = current_value
+        self.original_value = current_value
+        self.instance_value = current_value
+        self.parent_value = current_value
+        self.is_overridden = is_overridden
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        
+        # Override checkbox
+        self.override_checkbox = QCheckBox()
+        self.override_checkbox.setChecked(self.is_overridden)
+        self.override_checkbox.setMaximumWidth(20)
+        self.override_checkbox.setToolTip("Override parameter")
+        self.override_checkbox.toggled.connect(self.on_override_toggled)
+        
+        # Parameter name
+        self.label = QLabel(param_name)
+        self.label.setMinimumWidth(100)
+        self.label.setObjectName("ParamLabel")
+        
+        # Switch checkbox
+        self.switch_checkbox = QCheckBox()
+        self.switch_checkbox.setChecked(current_value)
+        self.switch_checkbox.toggled.connect(self.on_switch_changed)
+        
+        layout.addWidget(self.override_checkbox)
+        layout.addWidget(self.label)
+        layout.addWidget(self.switch_checkbox)
+        layout.addStretch()
+        
+        self.update_override_state()
+        
+    def on_override_toggled(self, checked):
+        """Handle override checkbox toggle"""
+        if checked:
+            self.switch_checkbox.setChecked(self.instance_value)
+        else:
+            self.instance_value = self.switch_checkbox.isChecked()
+            self.switch_checkbox.setChecked(self.parent_value)
+        
+        self.is_overridden = checked
+        self.update_override_state()
+        self.override_changed.emit(self.param_name, checked)
+        
+    def update_override_state(self):
+        """Update widget appearance based on override state"""
+        self.switch_checkbox.setEnabled(self.is_overridden)
+        
+        if self.is_overridden:
+            self.label.setStyleSheet("color: #ffffff; font-weight: bold;")
+        else:
+            self.label.setStyleSheet("color: #888888; font-weight: normal;")
+    
+    def set_parent_value(self, parent_val):
+        """Store parent material's default value"""
+        self.parent_value = parent_val
+    
+    def on_switch_changed(self, checked):
+        """Handle switch value change"""
+        self.current_value = checked
+        self.switch_changed.emit(self.param_name, checked)
+        
+    def reset_to_original(self):
+        """Reset to original value"""
+        self.switch_checkbox.setChecked(self.original_value)
+
 class MaterialInstanceEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -813,13 +896,14 @@ class MaterialInstanceEditor(QWidget):
             # Get parameter names from parent material
             scalar_params = unreal.MaterialEditingLibrary.get_scalar_parameter_names(parent_material)
             vector_params = unreal.MaterialEditingLibrary.get_vector_parameter_names(parent_material)
+            switch_params = unreal.MaterialEditingLibrary.get_static_switch_parameter_names(parent_material)
             
             # Group parameters by category
-            param_groups = self.group_parameters(scalar_params, vector_params)
+            param_groups = self.group_parameters(scalar_params, vector_params, switch_params)
             
             # Create sections and parameters
             for group_name, params in param_groups.items():
-                if params['scalars'] or params['vectors']:
+                if params['scalars'] or params['vectors'] or params['switches']:
                     section = CollapsibleSection(group_name)
                     self.sections[group_name] = section
                     
@@ -855,10 +939,15 @@ class MaterialInstanceEditor(QWidget):
                         try:
                             if self.is_master_material:
                                 current_value = unreal.MaterialEditingLibrary.get_material_vector_parameter_value(instance, param_name)
-                                is_overridden = True  # Master materials always "override"
+                                parent_value = current_value  # Master materials are their own parent
+                                is_overridden = True
                             else:
                                 current_value = unreal.MaterialEditingLibrary.get_material_instance_vector_parameter_value(instance, param_name)
-                                is_overridden = True  # For now, assume all loaded params are overridden
+                                try:
+                                    parent_value = parent_material.get_vector_parameter_value(param_name)
+                                except:
+                                    parent_value = current_value
+                                is_overridden = True
                             
                             color_picker = ColorPicker(str(param_name), current_value, is_overridden)
                             color_picker.color_changed.connect(self.on_vector_parameter_changed)
@@ -868,26 +957,50 @@ class MaterialInstanceEditor(QWidget):
                         except Exception as e:
                             unreal.log_warning(f"⚠️ Failed to load vector parameter {param_name}: {e}")
                     
+                    # Add switch parameters
+                    for param_name in params['switches']:
+                        try:
+                            if self.is_master_material:
+                                current_value = unreal.MaterialEditingLibrary.get_static_switch_parameter_value(instance, param_name)
+                                parent_value = current_value
+                                is_overridden = True
+                            else:
+                                current_value = unreal.MaterialEditingLibrary.get_material_instance_static_switch_parameter_value(instance, param_name)
+                                try:
+                                    parent_value = parent_material.get_static_switch_parameter_value(param_name)
+                                except:
+                                    parent_value = current_value
+                                is_overridden = True
+                            
+                            switch_widget = SwitchParameter(str(param_name), current_value, is_overridden)
+                            switch_widget.set_parent_value(parent_value)
+                            switch_widget.switch_changed.connect(self.on_switch_parameter_changed)
+                            switch_widget.override_changed.connect(self.on_parameter_override_changed)
+                            section.add_widget(switch_widget)
+                            self.parameter_widgets[str(param_name)] = switch_widget
+                        except Exception as e:
+                            unreal.log_warning(f"⚠️ Failed to load switch parameter {param_name}: {e}")
+                    
                     # Add section to layout
                     self.params_layout.insertWidget(self.params_layout.count() - 1, section)
             
-            param_count = len(scalar_params) + len(vector_params)
-            unreal.log(f"✅ Loaded {param_count} parameters ({len(scalar_params)} scalar, {len(vector_params)} vector)")
+            param_count = len(scalar_params) + len(vector_params) + len(switch_params)
+            unreal.log(f"✅ Loaded {param_count} parameters ({len(scalar_params)} scalar, {len(vector_params)} vector, {len(switch_params)} switch)")
             
         except Exception as e:
             unreal.log_error(f"❌ Failed to load material parameters: {e}")
     
-    def group_parameters(self, scalar_params, vector_params):
+    def group_parameters(self, scalar_params, vector_params, switch_params):
         """Group parameters by logical categories"""
         groups = {
-            "Color": {"scalars": [], "vectors": []},
-            "Roughness": {"scalars": [], "vectors": []},
-            "Material Properties": {"scalars": [], "vectors": []},
-            "UV Controls": {"scalars": [], "vectors": []},
-            "Displacement": {"scalars": [], "vectors": []},
-            "Environment": {"scalars": [], "vectors": []},
-            "Texture Variation": {"scalars": [], "vectors": []},
-            "Other": {"scalars": [], "vectors": []}
+            "Color": {"scalars": [], "vectors": [], "switches": []},
+            "Roughness": {"scalars": [], "vectors": [], "switches": []},
+            "Material Properties": {"scalars": [], "vectors": [], "switches": []},
+            "UV Controls": {"scalars": [], "vectors": [], "switches": []},
+            "Displacement": {"scalars": [], "vectors": [], "switches": []},
+            "Environment": {"scalars": [], "vectors": [], "switches": []},
+            "Texture Variation": {"scalars": [], "vectors": [], "switches": []},
+            "Other": {"scalars": [], "vectors": [], "switches": []}
         }
         
         # Categorize scalar parameters
@@ -917,6 +1030,18 @@ class MaterialInstanceEditor(QWidget):
                 groups["Color"]["vectors"].append(param)
             else:
                 groups["Other"]["vectors"].append(param)
+        
+        # Categorize switch parameters
+        for param in switch_params:
+            param_lower = str(param).lower()
+            if any(word in param_lower for word in ['color', 'diffuse', 'mfp']):
+                groups["Material Properties"]["switches"].append(param)
+            elif any(word in param_lower for word in ['variation', 'random', 'var']):
+                groups["Texture Variation"]["switches"].append(param)
+            elif any(word in param_lower for word in ['triplanar', 'world']):
+                groups["UV Controls"]["switches"].append(param)
+            else:
+                groups["Other"]["switches"].append(param)
         
         return groups
     
@@ -1044,6 +1169,27 @@ class MaterialInstanceEditor(QWidget):
             unreal.log_error(f"❌ Failed to create instance: {e}")
             return None
     
+    def on_switch_parameter_changed(self, param_name, value):
+        """Handle switch parameter changes"""
+        if not self.current_instance:
+            return
+        
+        try:
+            if self.is_master_material:
+                unreal.MaterialEditingLibrary.set_material_static_switch_parameter_value(
+                    self.current_instance, param_name, value
+                )
+                unreal.MaterialEditingLibrary.recompile_material(self.current_instance)
+                unreal.log(f"🔄 Updated master switch parameter: {param_name} = {value}")
+            else:
+                unreal.MaterialEditingLibrary.set_material_instance_static_switch_parameter_value(
+                    self.current_instance, param_name, value
+                )
+                unreal.MaterialEditingLibrary.update_material_instance(self.current_instance)
+            
+        except Exception as e:
+            unreal.log_warning(f"⚠️ Failed to set switch parameter {param_name}: {e}")
+    
     def on_vector_parameter_changed(self, param_name, qcolor):
         """Update vector parameter in material instance"""
         if self.current_instance:
@@ -1078,6 +1224,8 @@ class MaterialInstanceEditor(QWidget):
             if isinstance(widget, ParameterSlider):
                 widget.reset_to_original()
             elif isinstance(widget, ColorPicker):
+                widget.reset_to_original()
+            elif isinstance(widget, SwitchParameter):
                 widget.reset_to_original()
     
     def apply_styles(self):
