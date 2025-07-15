@@ -13,17 +13,17 @@ from automatty_utils import AutoMattyUtils
 # Material coordinate layouts - FIXED SPACING
 COORD_LAYOUTS = {
     "orm": {
-        "Color": (-1400, -200),
+        "Color": (-1400, -100),
         "ORM": (-1400, -400),
-        "Normal": (-1400, -600),
-        "Emission": (-1400, -800),
+        "Normal": (-1400, -800),
+        "Emission": (-1400, -1200),
     },
     "split": {
-        "Color": (-1400, -200),
+        "Color": (-1400, -100),
         "Roughness": (-1400, -400),
-        "Metallic": (-1400, -600),
-        "Normal": (-1400, -800),
-        "Emission": (-1400, -1000),
+        "Metallic": (-1400, -800),
+        "Normal": (-1400, -1200),
+        "Emission": (-1400, -1600),
     },
     "environment_simple": {
         "ColorA": (-1600, -200),
