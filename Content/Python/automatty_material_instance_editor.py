@@ -1,6 +1,6 @@
 """
-AutoMatty Material Instance Editor - COMPLETE FIXED VERSION
-Removed max value clamps - users can input any value beyond expected ranges
+AutoMatty Material Instance Editor - VISUAL OVERHAUL
+Drag-value boxes with progress bar fills and #0d3c87 color scheme
 """
 
 import unreal_qt
@@ -15,13 +15,13 @@ from PySide6.QtGui import *
 material_editor_widget = None
 
 class DragValueBox(QWidget):
-    """Custom drag-value box with progress bar fill - FIXED: No max clamps"""
+    """Custom drag-value box with progress bar fill"""
     value_changed = Signal(float)
     
     def __init__(self, min_val=0.0, max_val=1.0, current_val=0.5, decimals=3, parent=None):
         super().__init__(parent)
         self.min_val = min_val
-        self.max_val = max_val  # Keep for progress bar calculation, but don't clamp to it
+        self.max_val = max_val
         self.current_val = current_val
         self.decimals = decimals
         self.is_dragging = False
@@ -50,17 +50,14 @@ class DragValueBox(QWidget):
         self.update_display()
     
     def get_progress(self):
-        """Get progress as 0-1 value - clamp only for visual progress bar"""
+        """Get progress as 0-1 value"""
         if self.max_val == self.min_val:
             return 0.0
-        # Clamp ONLY for progress bar visualization, not for actual value
-        clamped_val = max(self.min_val, min(self.max_val, self.current_val))
-        return (clamped_val - self.min_val) / (self.max_val - self.min_val)
+        return (self.current_val - self.min_val) / (self.max_val - self.min_val)
     
     def set_value(self, value):
-        """Set value and update display - FIXED: Only clamp to min, no max clamp"""
-        # Only enforce minimum value, let users go above max if they want
-        self.current_val = max(self.min_val, value)
+        """Set value and update display"""
+        self.current_val = max(self.min_val, min(self.max_val, value))
         self.update_display()
         self.value_changed.emit(self.current_val)
     
@@ -79,19 +76,16 @@ class DragValueBox(QWidget):
         bg_color = QColor("#3c3c3c" if not self.is_editing else "#4a4a4a")
         painter.fillRect(rect, bg_color)
         
-        # Progress fill - only show if value is within expected range
+        # Progress fill
         progress = self.get_progress()
-        if progress > 0 and self.current_val <= self.max_val:
+        if progress > 0:
             fill_width = int(rect.width() * progress)
             fill_rect = QRect(0, 0, fill_width, rect.height())
             fill_color = QColor("#0d3c87")  # Your custom blue
             painter.fillRect(fill_rect, fill_color)
         
-        # Border - different color if value exceeds expected max
-        if self.current_val > self.max_val:
-            border_color = QColor("#ff6600")  # Orange for values above expected range
-        else:
-            border_color = QColor("#0d3c87" if self.hasFocus() else "#555")
+        # Border
+        border_color = QColor("#0d3c87" if self.hasFocus() else "#555")
         painter.setPen(QPen(border_color, 1))
         painter.drawRect(rect.adjusted(0, 0, -1, -1))
         
@@ -122,10 +116,9 @@ class DragValueBox(QWidget):
             else:
                 sensitivity = self.base_sensitivity
             
-            # Calculate delta - use a larger range for calculation
-            range_size = max(self.max_val - self.min_val, 10.0)  # Ensure reasonable sensitivity
+            # Calculate delta
             delta_x = event.pos().x() - self.drag_start_pos.x()
-            value_delta = delta_x * sensitivity * range_size
+            value_delta = delta_x * sensitivity * (self.max_val - self.min_val)
             new_value = self.drag_start_value + value_delta
             
             self.set_value(new_value)
@@ -252,14 +245,18 @@ class CollapsibleSection(QWidget):
 
 class ParameterSlider(QWidget):
     value_changed = Signal(str, float)
+    override_changed = Signal(str, bool)
     
-    def __init__(self, param_name, min_val=0.0, max_val=1.0, current_val=0.5, parent=None):
+    def __init__(self, param_name, min_val=0.0, max_val=1.0, current_val=0.5, is_overridden=True, parent=None):
         super().__init__(parent)
         self.param_name = param_name
         self.default_val = current_val
         self.original_value = current_val
+        self.instance_value = current_val  # Store instance override value
+        self.parent_value = current_val    # Store parent default value
         self.min_val = min_val
         self.max_val = max_val
+        self.is_overridden = is_overridden
         
         # Use a splitter for resizable columns
         self.splitter = QSplitter(Qt.Horizontal)
@@ -269,10 +266,17 @@ class ParameterSlider(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.splitter)
         
-        # Parameter name widget
+        # Parameter name widget with override checkbox
         name_widget = QWidget()
         name_layout = QHBoxLayout(name_widget)
         name_layout.setContentsMargins(5, 0, 5, 0)
+        
+        # Override checkbox
+        self.override_checkbox = QCheckBox()
+        self.override_checkbox.setChecked(self.is_overridden)
+        self.override_checkbox.setMaximumWidth(20)
+        self.override_checkbox.setToolTip("Override parameter")
+        self.override_checkbox.toggled.connect(self.on_override_toggled)
         
         self.label = QLabel(param_name)
         self.label.setMinimumWidth(80)
@@ -282,10 +286,11 @@ class ParameterSlider(QWidget):
         self.label.setWordWrap(False)
         self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         
+        name_layout.addWidget(self.override_checkbox)
         name_layout.addWidget(self.label)
         name_layout.addStretch()
         
-        # Value drag box widget (no more spacer)
+        # Value drag box widget
         value_widget = QWidget()
         value_layout = QHBoxLayout(value_widget)
         value_layout.setContentsMargins(5, 0, 5, 0)
@@ -307,20 +312,23 @@ class ParameterSlider(QWidget):
         
         reset_layout.addWidget(self.reset_btn)
         
-        # Add widgets to splitter (removed spacer)
+        # Add widgets to splitter
         self.splitter.addWidget(name_widget)
         self.splitter.addWidget(value_widget)
         self.splitter.addWidget(reset_widget)
         
-        # Set splitter proportions (no spacer)
+        # Set splitter proportions
         self.splitter.setStretchFactor(0, 4)  # Name column
         self.splitter.setStretchFactor(1, 1)  # Value box
         self.splitter.setStretchFactor(2, 0)  # Reset button
         
-        # Set initial sizes (smaller overall)
+        # Set initial sizes
         self.splitter.setSizes([160, 80, 30])
         
-        # Enhanced tooltip - UPDATED
+        # Update widget states based on override
+        self.update_override_state()
+        
+        # Enhanced tooltip
         tooltip_text = (f"{param_name}\n\n"
                        "💡 Drag to change value\n"
                        "• Normal: Regular speed\n" 
@@ -328,9 +336,43 @@ class ParameterSlider(QWidget):
                        "• Ctrl: Coarse control (5x faster)\n"
                        "• Double-click: Manual input\n"
                        "• Mouse wheel: Adjust value\n"
-                       "• No maximum limit - enter any value!")
+                       "• Checkbox: Override parameter")
         self.value_box.setToolTip(tooltip_text)
         
+    def set_parent_value(self, parent_val):
+        """Store parent material's default value"""
+        self.parent_value = parent_val
+    
+    def on_override_toggled(self, checked):
+        """Handle override checkbox toggle"""
+        if checked:
+            # Restore instance override value
+            self.value_box.set_value(self.instance_value)
+        else:
+            # Store current value as instance value, then show parent value
+            self.instance_value = self.value_box.current_val
+            self.value_box.set_value(self.parent_value)
+        
+        self.is_overridden = checked
+        self.update_override_state()
+        self.override_changed.emit(self.param_name, checked)
+        
+    def update_override_state(self):
+        """Update widget appearance based on override state"""
+        self.value_box.setEnabled(self.is_overridden)
+        self.reset_btn.setEnabled(self.is_overridden)
+        
+        if self.is_overridden:
+            self.label.setStyleSheet("color: #ffffff; font-weight: bold;")
+        else:
+            self.label.setStyleSheet("color: #888888; font-weight: normal;")
+        
+    def set_override(self, override):
+        """Set override state programmatically"""
+        self.override_checkbox.setChecked(override)
+        self.is_overridden = override
+        self.update_override_state()
+    
     def on_value_changed(self, value):
         self.value_changed.emit(self.param_name, value)
         
@@ -343,10 +385,12 @@ class ParameterSlider(QWidget):
 
 class ColorPicker(QWidget):
     color_changed = Signal(str, QColor)
+    override_changed = Signal(str, bool)
     
-    def __init__(self, param_name, current_color=None, parent=None):
+    def __init__(self, param_name, current_color=None, is_overridden=True, parent=None):
         super().__init__(parent)
         self.param_name = param_name
+        self.is_overridden = is_overridden
         
         # Convert UE LinearColor to QColor if provided
         if current_color and hasattr(current_color, 'r'):
@@ -359,6 +403,13 @@ class ColorPicker(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
+        
+        # Override checkbox
+        self.override_checkbox = QCheckBox()
+        self.override_checkbox.setChecked(self.is_overridden)
+        self.override_checkbox.setMaximumWidth(20)
+        self.override_checkbox.setToolTip("Override parameter")
+        self.override_checkbox.toggled.connect(self.on_override_toggled)
         
         # Parameter name
         self.label = QLabel(param_name)
@@ -378,9 +429,34 @@ class ColorPicker(QWidget):
         # Update color button after rgb_label exists
         self.update_color_button()
         
+        layout.addWidget(self.override_checkbox)
         layout.addWidget(self.label)
         layout.addWidget(self.color_btn)
         layout.addWidget(self.rgb_label, 1)
+        
+        # Update override state
+        self.update_override_state()
+        
+    def on_override_toggled(self, checked):
+        """Handle override checkbox toggle"""
+        self.is_overridden = checked
+        self.update_override_state()
+        self.override_changed.emit(self.param_name, checked)
+        
+    def update_override_state(self):
+        """Update widget appearance based on override state"""
+        self.color_btn.setEnabled(self.is_overridden)
+        
+        if self.is_overridden:
+            self.label.setStyleSheet("color: #ffffff; font-weight: bold;")
+        else:
+            self.label.setStyleSheet("color: #888888; font-weight: normal;")
+    
+    def set_override(self, override):
+        """Set override state programmatically"""
+        self.override_checkbox.setChecked(override)
+        self.is_overridden = override
+        self.update_override_state()
         
     def update_color_button(self):
         self.color_btn.setStyleSheet(f"""
@@ -437,6 +513,11 @@ class MaterialInstanceEditor(QWidget):
         title = QLabel("Material Instance Editor")
         title.setObjectName("Title")
         
+        # Open Master button
+        open_master_btn = QPushButton("Open Master")
+        open_master_btn.setObjectName("OpenMasterButton")
+        open_master_btn.clicked.connect(self.open_master_material)
+        
         close_btn = QPushButton("×")
         close_btn.setObjectName("CloseButton")
         close_btn.setMaximumWidth(30)
@@ -444,6 +525,7 @@ class MaterialInstanceEditor(QWidget):
         
         header_layout.addWidget(title)
         header_layout.addStretch()
+        header_layout.addWidget(open_master_btn)
         header_layout.addWidget(close_btn)
         
         # Material dropdown
@@ -486,17 +568,59 @@ class MaterialInstanceEditor(QWidget):
         layout.addWidget(scroll, 1)
         layout.addLayout(button_layout)
         
+    def open_master_material(self):
+        """Open the parent material in UE's material editor"""
+        if not self.current_instance:
+            unreal.log_warning("⚠️ No material instance loaded")
+            return
+        
+        parent_material = None
+        if self.is_master_material:
+            parent_material = self.current_instance
+        else:
+            parent_material = self.current_instance.get_editor_property('parent')
+        
+        if parent_material:
+            # Open in UE's material editor
+            editor_subsystem = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
+            editor_subsystem.open_editor_for_assets([parent_material])
+            unreal.log(f"🎯 Opened master material: {parent_material.get_name()}")
+        else:
+            unreal.log_error("❌ No parent material found")
+    
+    def on_parameter_override_changed(self, param_name, is_overridden):
+        """Handle parameter override state changes"""
+        if not self.current_instance or self.is_master_material:
+            return
+        
+        try:
+            if is_overridden:
+                # Re-enable override - set to stored instance value
+                widget = self.parameter_widgets.get(param_name)
+                if widget and isinstance(widget, ParameterSlider):
+                    unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(
+                        self.current_instance, param_name, widget.instance_value
+                    )
+                    unreal.log(f"✅ Restored override for {param_name}: {widget.instance_value}")
+            else:
+                # Disable override - set to parent default
+                widget = self.parameter_widgets.get(param_name)
+                if widget and isinstance(widget, ParameterSlider):
+                    unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(
+                        self.current_instance, param_name, widget.parent_value
+                    )
+                    unreal.log(f"📝 Using parent default for {param_name}: {widget.parent_value}")
+        
+        except Exception as e:
+            unreal.log_warning(f"⚠️ Failed to toggle override for {param_name}: {e}")
+    
     def get_smart_parameter_range(self, param_name):
-        """Get appropriate min/max values based on parameter type - FIXED: More liberal ranges"""
+        """Get appropriate min/max values based on parameter type"""
         param_lower = param_name.lower()
         
-        # MFP scale - specific case before general scale check
-        if 'mfp' in param_lower and 'scale' in param_lower:
-            return 0.0, 10.0
-            
-        # UV Scale and tiling parameters - much higher range, no restrictive max
-        elif any(word in param_lower for word in ['scale', 'tiling', 'uvscale', 'tile']):
-            return 0.01, 100.0  # Still provide range for UI, but no clamping
+        # UV Scale and tiling parameters - much higher range
+        if any(word in param_lower for word in ['scale', 'tiling', 'uvscale', 'tile']):
+            return 0.01, 100.0
             
         # Displacement intensity - moderate range
         elif any(word in param_lower for word in ['displacement', 'height', 'disp']):
@@ -690,7 +814,7 @@ class MaterialInstanceEditor(QWidget):
             scalar_params = unreal.MaterialEditingLibrary.get_scalar_parameter_names(parent_material)
             vector_params = unreal.MaterialEditingLibrary.get_vector_parameter_names(parent_material)
             
-            # Group parameters by category (no texture params)
+            # Group parameters by category
             param_groups = self.group_parameters(scalar_params, vector_params)
             
             # Create sections and parameters
@@ -703,15 +827,24 @@ class MaterialInstanceEditor(QWidget):
                     for param_name in params['scalars']:
                         try:
                             if self.is_master_material:
-                                current_value = unreal.MaterialEditingLibrary.get_material_scalar_parameter_value(instance, param_name)
+                                current_value = unreal.MaterialEditingLibrary.get_scalar_parameter_value(instance, param_name)
+                                parent_value = current_value  # Master materials are their own parent
+                                is_overridden = True
                             else:
                                 current_value = unreal.MaterialEditingLibrary.get_material_instance_scalar_parameter_value(instance, param_name)
+                                try:
+                                    parent_value = parent_material.get_scalar_parameter_value(param_name)
+                                except:
+                                    parent_value = current_value  # Fallback if parent doesn't have this param
+                                is_overridden = True
                             
-                            # Get smart range for this parameter - ranges are for UI only, no clamping
+                            # Get smart range for this parameter
                             min_val, max_val = self.get_smart_parameter_range(str(param_name))
                             
-                            slider = ParameterSlider(str(param_name), min_val, max_val, current_value)
+                            slider = ParameterSlider(str(param_name), min_val, max_val, current_value, is_overridden)
+                            slider.set_parent_value(parent_value)  # Store parent default
                             slider.value_changed.connect(self.on_scalar_parameter_changed)
+                            slider.override_changed.connect(self.on_parameter_override_changed)
                             section.add_widget(slider)
                             self.parameter_widgets[str(param_name)] = slider
                         except Exception as e:
@@ -722,11 +855,14 @@ class MaterialInstanceEditor(QWidget):
                         try:
                             if self.is_master_material:
                                 current_value = unreal.MaterialEditingLibrary.get_material_vector_parameter_value(instance, param_name)
+                                is_overridden = True  # Master materials always "override"
                             else:
                                 current_value = unreal.MaterialEditingLibrary.get_material_instance_vector_parameter_value(instance, param_name)
+                                is_overridden = True  # For now, assume all loaded params are overridden
                             
-                            color_picker = ColorPicker(str(param_name), current_value)
+                            color_picker = ColorPicker(str(param_name), current_value, is_overridden)
                             color_picker.color_changed.connect(self.on_vector_parameter_changed)
+                            color_picker.override_changed.connect(self.on_parameter_override_changed)
                             section.add_widget(color_picker)
                             self.parameter_widgets[str(param_name)] = color_picker
                         except Exception as e:
@@ -996,6 +1132,21 @@ class MaterialInstanceEditor(QWidget):
                 background-color: #ff6666;
             }
             
+            #OpenMasterButton {
+                background-color: #0d3c87;
+                color: white;
+                border: 1px solid #0a2d65;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-weight: bold;
+                font-size: 11px;
+                margin-right: 5px;
+            }
+            
+            #OpenMasterButton:hover {
+                background-color: #1048a0;
+            }
+            
             #ScrollArea {
                 border: 1px solid #3c3c3c;
                 border-radius: 5px;
@@ -1176,7 +1327,7 @@ def show_editor_for_selection():
     material_editor_widget.load_materials(materials)
     material_editor_widget.show()
     
-    unreal.log(f"🎉 Material Editor opened with {len(materials)} materials - NO MAX CLAMPS!")
+    unreal.log(f"🎉 Material Editor opened with {len(materials)} materials")
 
 def reload_material_editor():
     """Hot-reload the material editor without restarting UE"""
