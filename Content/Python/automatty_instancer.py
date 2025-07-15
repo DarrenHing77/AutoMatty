@@ -3,7 +3,8 @@ AutoMatty Material Instancer - Updated Version
 Smart material instance creation with environment + height map + texture variation support
 """
 import unreal
-from automatty_config import AutoMattyConfig, AutoMattyUtils
+from automatty_config import AutoMattyConfig
+from automatty_utils import AutoMattyUtils
 
 
 def create_material_instance():

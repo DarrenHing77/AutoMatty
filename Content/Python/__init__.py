@@ -5,6 +5,5 @@ import os
 import sys
 import automatty_config
 
-
-# Then import config
-from automatty_config import AutoMattyConfig, AutoMattyUtils
+from automatty_config import AutoMattyConfig
+from automatty_utils import AutoMattyUtils

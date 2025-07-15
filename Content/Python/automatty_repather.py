@@ -2,7 +2,8 @@
 AutoMatty Texture Repather with Texture Variation Support - Smart texture replacement in material instances
 """
 import unreal
-from automatty_config import AutoMattyConfig, AutoMattyUtils
+from automatty_config import AutoMattyConfig
+from automatty_utils import AutoMattyUtils
 
 
 def repath_material_instances():

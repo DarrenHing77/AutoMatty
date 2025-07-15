@@ -3,7 +3,8 @@ AutoMatty Material Builder - COMPLETE FIXED VERSION
 Clean dictionary-driven approach with proper triplanar support
 """
 import unreal
-from automatty_config import AutoMattyConfig, AutoMattyUtils
+from automatty_config import AutoMattyConfig
+from automatty_utils import AutoMattyUtils
 
 # ========================================
 # CONFIGURATION DICTIONARIES - FIXED
