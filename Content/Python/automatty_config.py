@@ -1,6 +1,6 @@
 """
-AutoMatty Configuration - REFACTORED VERSION
-Dictionary-driven config management, no more copy-paste hell
+AutoMatty Configuration - COMPLETE VERSION with UE 5.6 Native Menu System
+Dictionary-driven config management with enhanced menu hierarchy
 """
 import unreal
 import os
@@ -406,20 +406,75 @@ def show_material_editor():
         return False
 
 # ========================================
-# MENU SYSTEM
+# UE 5.6 NATIVE MENU SYSTEM
 # ========================================
 
 @unreal.uclass()
-class AutoMattyMenuScript(unreal.ToolMenuEntryScript):
+class AutoMattyMainMenuScript(unreal.ToolMenuEntryScript):
+    """Main AutoMatty widget entry"""
+    
+    @unreal.ufunction(override=True) 
+    def execute(self, context):
+        try:
+            subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
+            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
+            if blueprint:
+                subsystem.spawn_and_register_tab(blueprint)
+                unreal.log("🎯 AutoMatty main widget opened")
+        except Exception as e:
+            unreal.log_error(f"❌ Failed: {e}")
+
+@unreal.uclass()
+class AutoMattyMaterialEditorScript(unreal.ToolMenuEntryScript):
     """Material Editor menu entry"""
     
     @unreal.ufunction(override=True)
     def execute(self, context):
         show_material_editor()
 
-@unreal.uclass()  
-class AutoMattyWidgetScript(unreal.ToolMenuEntryScript):
-    """Main widget menu entry"""
+@unreal.uclass() 
+class AutoMattyCreateORMScript(unreal.ToolMenuEntryScript):
+    """Quick ORM material creation"""
+    
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        create_orm_material()
+
+@unreal.uclass()
+class AutoMattyCreateSplitScript(unreal.ToolMenuEntryScript):
+    """Quick Split material creation"""
+    
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        create_split_material()
+
+@unreal.uclass()
+class AutoMattyCreateEnvironmentScript(unreal.ToolMenuEntryScript):
+    """Quick Environment material creation"""
+    
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        create_environment_material()
+
+@unreal.uclass()
+class AutoMattyCreateInstanceScript(unreal.ToolMenuEntryScript):
+    """Quick material instance creation"""
+    
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        create_material_instance()
+
+@unreal.uclass()
+class AutoMattyRepathScript(unreal.ToolMenuEntryScript):
+    """Quick texture repathing"""
+    
+    @unreal.ufunction(override=True)
+    def execute(self, context):
+        repath_material_instances()
+
+@unreal.uclass()
+class AutoMattySettingsScript(unreal.ToolMenuEntryScript):
+    """Settings interface"""
     
     @unreal.ufunction(override=True)
     def execute(self, context):
@@ -428,51 +483,99 @@ class AutoMattyWidgetScript(unreal.ToolMenuEntryScript):
             blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
             if blueprint:
                 widget = subsystem.spawn_and_register_tab(blueprint)
-                if widget:
-                    unreal.log("🎯 AutoMatty widget opened!")
-                else:
-                    unreal.log_error("❌ Failed to spawn widget")
+                unreal.log("🎯 AutoMatty settings opened")
         except Exception as e:
-            unreal.log_error(f"❌ Widget failed: {e}")
+            unreal.log_error(f"❌ Failed: {e}")
 
-class MenuManager:
-    """Menu registration management"""
+class AutoMattyMenuManager:
+    """Clean UE 5.6 toolbar dropdown system"""
     
-    _menu_script = None
-    _widget_script = None
+    _menu_scripts = {}
     
     @staticmethod
-    def register_menus():
-        """Register both menu entries"""
+    def register_main_menu():
+        """Register AutoMatty as toolbar dropdown button - FIXED VERSION"""
         try:
             menus = unreal.ToolMenus.get()
             
-            # Widget entry
-            MenuManager._widget_script = AutoMattyWidgetScript()
-            MenuManager._widget_script.init_entry(
-                owner_name="AutoMatty",
-                menu="LevelEditor.MainMenu.Tools",
-                section="LevelEditorModules", 
-                name="AutoMattyWidget",
-                label="AutoMatty",
-                tool_tip="Open AutoMatty main widget"
-            )
-            MenuManager._widget_script.register_menu_entry()
+            # Get the toolbar - try User section first, then main toolbar
+            toolbar = menus.find_menu("LevelEditor.LevelEditorToolBar.User")
+            if not toolbar:
+                toolbar = menus.find_menu("LevelEditor.LevelEditorToolBar")
             
-            # Editor entry
-            MenuManager._menu_script = AutoMattyMenuScript()
-            MenuManager._menu_script.init_entry(
-                owner_name="AutoMatty",
-                menu="LevelEditor.MainMenu.Tools",
-                section="LevelEditorModules",
-                name="AutoMattyMaterialEditor", 
-                label="AutoMatty Material Editor",
-                tool_tip="Open AutoMatty Material Instance Editor"
-            )
-            MenuManager._menu_script.register_menu_entry()
+            if not toolbar:
+                unreal.log_error("❌ Toolbar not found")
+                return False
             
+            # FIXED: Use proper UE API instead of manual ToolMenuEntry creation
+            toolbar_entry = unreal.ToolMenuEntryExtensions.init_menu_entry(
+                toolbar.menu_name,
+                'AutoMattyToolbar',
+                'AutoMatty',
+                'AutoMatty material automation toolkit',
+                unreal.ToolMenuStringCommandType.COMMAND,
+                '',
+                ''
+            )
+            
+            # Set as combo button type
+            toolbar_entry.type = unreal.MultiBlockType.TOOL_BAR_COMBO_BUTTON
+            
+            # Add to toolbar first
+            toolbar.add_menu_entry("User", toolbar_entry)
+            
+            # Now register the dropdown menu
+            dropdown_menu_name = f"{toolbar.menu_name}.AutoMattyToolbar"
+            automatty_dropdown = menus.register_menu(
+                dropdown_menu_name,
+                "",
+                unreal.MultiBoxType.MENU,
+                False
+            )
+            
+            # Add sections
+            automatty_dropdown.add_section("Main", "Main Tools")
+            automatty_dropdown.add_section("QuickCreate", "Quick Create")  
+            automatty_dropdown.add_section("Utilities", "Utilities")
+            
+            # All menu items for the dropdown
+            menu_items = [
+                # Main tools
+                ("AutoMattyWidget", "Main Widget", "Open AutoMatty main interface", AutoMattyMainMenuScript, "Main"),
+                ("AutoMattyMaterialEditor", "Material Editor", "Advanced material instance editor", AutoMattyMaterialEditorScript, "Main"),
+                
+                # Quick creation
+                ("AutoMattyCreateORM", "Create ORM Material", "Quick create ORM material with substrate", AutoMattyCreateORMScript, "QuickCreate"),
+                ("AutoMattyCreateSplit", "Create Split Material", "Quick create Split material", AutoMattyCreateSplitScript, "QuickCreate"),
+                ("AutoMattyCreateEnvironment", "Create Environment Material", "Advanced environment material with A/B blending", AutoMattyCreateEnvironmentScript, "QuickCreate"),
+                ("AutoMattyCreateInstance", "Create Material Instance", "Smart material instance with auto texture matching", AutoMattyCreateInstanceScript, "QuickCreate"),
+                
+                # Utilities
+                ("AutoMattyRepath", "Repath Textures", "Batch repath material instance textures", AutoMattyRepathScript, "Utilities"),
+                ("AutoMattySettings", "Settings", "Configure AutoMatty paths and preferences", AutoMattySettingsScript, "Utilities"),
+            ]
+            
+            # Register menu scripts for dropdown items
+            for entry_name, label, tooltip, script_class, section in menu_items:
+                script = script_class()
+                script.init_entry(
+                    owner_name="AutoMatty",
+                    menu=dropdown_menu_name,  # Use the full dropdown menu name
+                    section=section,
+                    name=entry_name,
+                    label=label,
+                    tool_tip=tooltip
+                )
+                script.register_menu_entry()
+                AutoMattyMenuManager._menu_scripts[entry_name] = script
+            
+            # Refresh UI
             menus.refresh_all_widgets()
-            unreal.log("✅ AutoMatty menus registered!")
+            
+            unreal.log("✅ AutoMatty toolbar dropdown registered!")
+            unreal.log("📋 Toolbar: AutoMatty ▼ [8 items]")
+            unreal.log("💡 Set hotkeys: Edit → Preferences → Keyboard Shortcuts → Search 'AutoMatty'")
+            
             return True
             
         except Exception as e:
@@ -481,17 +584,16 @@ class MenuManager:
     
     @staticmethod
     def unregister_menus():
-        """Unregister menu entries"""
+        """Clean unregistration"""
         try:
             menus = unreal.ToolMenus.get()
             menus.unregister_owner_by_name("AutoMatty")
+            AutoMattyMenuManager._menu_scripts.clear()
             menus.refresh_all_widgets()
-            MenuManager._menu_script = None
-            MenuManager._widget_script = None
             unreal.log("🗑️ AutoMatty menus unregistered")
             return True
         except Exception as e:
-            unreal.log_error(f"❌ Menu unregistration failed: {e}")
+            unreal.log_error(f"❌ Unregistration failed: {e}")
             return False
 
 # ========================================
@@ -569,23 +671,19 @@ def ui_get_current_hotkey():
 def ui_set_hotkey(hotkey):
     return AutoMattyConfig.set_setting("hotkey", hotkey.strip().upper())
 
-# ADD THESE FUNCTIONS TO automatty_config.py
-
 # ========================================
-# DIRECT UI TEXT HANDLING - NO FORMAT TEXT NODE NEEDED
+# DIRECT UI TEXT HANDLING
 # ========================================
 
 def handle_material_path_changed(text_input):
     """Handle material path text change directly from EUW OnTextCommitted"""
     clean_path = str(text_input).strip()
     
-    # Clean up common UE path issues
     if clean_path.startswith("/All/Game/"):
         clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
     elif not clean_path.startswith("/Game/") and clean_path:
         clean_path = f"/Game/{clean_path.lstrip('/')}"
     
-    # Validate and save
     if clean_path and AutoMattyConfig.validate_and_create_path(clean_path):
         AutoMattyConfig.set_setting("material_path", clean_path)
         unreal.log(f"✅ Material path updated: {clean_path}")
@@ -598,13 +696,11 @@ def handle_texture_path_changed(text_input):
     """Handle texture path text change directly from EUW OnTextCommitted"""
     clean_path = str(text_input).strip()
     
-    # Clean up common UE path issues
     if clean_path.startswith("/All/Game/"):
         clean_path = clean_path.replace("/All/Game/", "/Game/", 1)
     elif not clean_path.startswith("/Game/") and clean_path:
         clean_path = f"/Game/{clean_path.lstrip('/')}"
     
-    # Validate and save
     if clean_path and AutoMattyConfig.validate_and_create_path(clean_path):
         AutoMattyConfig.set_setting("texture_path", clean_path)
         unreal.log(f"✅ Texture path updated: {clean_path}")
@@ -622,7 +718,6 @@ def handle_material_prefix_changed(text_input):
         unreal.log(f"✅ Material prefix updated: {clean_prefix}")
     
     return clean_prefix
-
 
 def force_load_ui_settings():
     """Force load all settings into UI - call this when widget opens"""
@@ -669,38 +764,20 @@ def force_load_ui_settings():
     unreal.log(f"🎯 Force loaded {success_count} UI settings")
     return success_count > 0
 
-# ========================================
-# WIDGET STARTUP FUNCTION
-# ========================================
-
 def initialize_widget_on_startup():
     """Call this when the widget first opens to load all settings"""
     try:
-        # Small delay to ensure widget is fully loaded
         import time
         time.sleep(0.1)
-        
-        # Force load all settings
         force_load_ui_settings()
-        
         unreal.log("🚀 AutoMatty widget initialized with saved settings")
         return True
-        
     except Exception as e:
         unreal.log_error(f"❌ Widget initialization failed: {e}")
         return False
 
-
-# Auto-setup
-MenuManager.register_menus()
-
-
-# ADD THIS TO automatty_config.py FOR DEBUGGING
-
 def debug_widget_loading():
     """Debug why settings aren't loading into widget"""
-    
-    # 1. Check if JSON file exists and has data
     config_path = AutoMattyConfig.get_config_path()
     unreal.log(f"🔍 Config path: {config_path}")
     
@@ -713,7 +790,6 @@ def debug_widget_loading():
         unreal.log(f"❌ Config file doesn't exist")
         return
     
-    # 2. Check if widget can be found
     widget = WidgetManager.get_widget()
     if widget:
         unreal.log(f"✅ Widget found: {widget}")
@@ -721,7 +797,6 @@ def debug_widget_loading():
         unreal.log(f"❌ Widget NOT found")
         return
     
-    # 3. Check if widget properties exist
     for setting_key, config_info in SETTINGS_CONFIG.items():
         widget_property = config_info.get("widget_property")
         unreal.log(f"🔍 Checking property: {widget_property}")
@@ -741,19 +816,15 @@ def force_debug_load():
     """Force load with detailed logging"""
     unreal.log("🚀 Starting debug load...")
     
-    # Check JSON values
     for setting_key in SETTINGS_CONFIG.keys():
         value = AutoMattyConfig.get_setting(setting_key)
         unreal.log(f"📊 {setting_key}: '{value}'")
     
-    # Try to load
     debug_widget_loading()
     
-    # Try manual load for ALL fields
     unreal.log("🔧 Attempting manual load...")
     widget = WidgetManager.get_widget()
     if widget:
-        # Test each field individually
         test_fields = [
             ("material_path", "MaterialPathInput"),
             ("texture_path", "TexturePathInput"), 
@@ -769,7 +840,6 @@ def force_debug_load():
                 
                 if input_widget and value:
                     input_widget.set_text(str(value))
-                    # Verify it was set
                     new_text = input_widget.get_text()
                     unreal.log(f"✅ Set {widget_property}: '{value}' → result: '{new_text}'")
                 else:
@@ -778,6 +848,9 @@ def force_debug_load():
             except Exception as e:
                 unreal.log(f"❌ Error setting {setting_key}: {e}")
 
-# USE THIS IN YOUR WIDGET CONSTRUCT:
-# import automatty_config
-# automatty_config.force_debug_load()
+# ========================================
+# INITIALIZE UE 5.6 NATIVE MENU SYSTEM
+# ========================================
+
+# Initialize the clean menu system
+AutoMattyMenuManager.register_main_menu()
