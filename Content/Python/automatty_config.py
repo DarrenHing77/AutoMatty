@@ -674,9 +674,23 @@ def ui_set_hotkey(hotkey):
 # ========================================
 # DIRECT UI TEXT HANDLING
 # ========================================
-
-def handle_material_path_changed(text_input):
+def handle_material_path_changed(text_input=None, commit_method=None):
     """Handle material path text change directly from EUW OnTextCommitted"""
+    
+    # If no text provided, get it from the widget
+    if text_input is None:
+        widget = WidgetManager.get_widget()
+        if widget:
+            material_input = widget.get_editor_property("MaterialPathInput")
+            if material_input:
+                text_input = material_input.get_text()
+            else:
+                unreal.log_error("❌ MaterialPathInput widget not found")
+                return ""
+        else:
+            unreal.log_error("❌ Widget not found")
+            return ""
+    
     clean_path = str(text_input).strip()
     
     if clean_path.startswith("/All/Game/"):
@@ -692,8 +706,23 @@ def handle_material_path_changed(text_input):
     
     return clean_path
 
-def handle_texture_path_changed(text_input):
+def handle_texture_path_changed(text_input=None, commit_method=None):
     """Handle texture path text change directly from EUW OnTextCommitted"""
+    
+    # If no text provided, get it from the widget
+    if text_input is None:
+        widget = WidgetManager.get_widget()
+        if widget:
+            texture_input = widget.get_editor_property("TexturePathInput")
+            if texture_input:
+                text_input = texture_input.get_text()
+            else:
+                unreal.log_error("❌ TexturePathInput widget not found")
+                return ""
+        else:
+            unreal.log_error("❌ Widget not found")
+            return ""
+    
     clean_path = str(text_input).strip()
     
     if clean_path.startswith("/All/Game/"):
@@ -709,8 +738,23 @@ def handle_texture_path_changed(text_input):
     
     return clean_path
 
-def handle_material_prefix_changed(text_input):
+def handle_material_prefix_changed(text_input=None, commit_method=None):
     """Handle material prefix text change directly from EUW OnTextCommitted"""
+    
+    # If no text provided, get it from the widget
+    if text_input is None:
+        widget = WidgetManager.get_widget()
+        if widget:
+            prefix_input = widget.get_editor_property("MaterialPrefixInput")
+            if prefix_input:
+                text_input = prefix_input.get_text()
+            else:
+                unreal.log_error("❌ MaterialPrefixInput widget not found")
+                return ""
+        else:
+            unreal.log_error("❌ Widget not found")
+            return ""
+    
     clean_prefix = str(text_input).strip()
     
     if clean_prefix:
@@ -718,6 +762,7 @@ def handle_material_prefix_changed(text_input):
         unreal.log(f"✅ Material prefix updated: {clean_prefix}")
     
     return clean_prefix
+
 
 def force_load_ui_settings():
     """Force load all settings into UI - call this when widget opens"""
@@ -847,6 +892,24 @@ def force_debug_load():
                     
             except Exception as e:
                 unreal.log(f"❌ Error setting {setting_key}: {e}")
+
+def open_material_path_in_browser():
+    """Open material path in content browser"""
+    path = AutoMattyConfig.get_setting("material_path")
+    if path:
+        unreal.EditorAssetLibrary.sync_browser_to_objects([path])
+        unreal.log(f"📂 Opened material path: {path}")
+    else:
+        unreal.log_warning("⚠️ No material path set")
+
+def open_texture_path_in_browser():
+    """Open texture path in content browser"""
+    path = AutoMattyConfig.get_setting("texture_path")
+    if path:
+        unreal.EditorAssetLibrary.sync_browser_to_objects([path])
+        unreal.log(f"📂 Opened texture path: {path}")
+    else:
+        unreal.log_warning("⚠️ No texture path set")
 
 # ========================================
 # INITIALIZE UE 5.6 NATIVE MENU SYSTEM
