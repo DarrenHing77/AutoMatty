@@ -69,12 +69,37 @@ class AutoMattyUtils:
             if m and int(m.group(1)) > max_idx:
                 max_idx = int(m.group(1))
         return f"{base_name}_{prefix}{max_idx+1:0{pad}d}"
-
+    
     @staticmethod
     def find_default_normal():
-        for path in unreal.EditorAssetLibrary.list_assets("/Engine", recursive=True, include_folder=False):
-            if path.lower().endswith("DefaultNormal"):
-                return unreal.EditorAssetLibrary.load_asset(path)
+        """Find default normal texture - FIXED VERSION"""
+        # Try direct path first (most reliable)
+        direct_paths = [
+            "/Engine/EngineMaterials/DefaultNormal",
+            "/Engine/EngineResources/DefaultTextures/DefaultNormal", 
+            "/Engine/EngineResources/DefaultNormal"
+        ]
+
+        for path in direct_paths:
+            texture = unreal.EditorAssetLibrary.load_asset(path)
+            if texture and isinstance(texture, unreal.Texture2D):
+                unreal.log(f"✅ Found default normal: {path}")
+                return texture
+
+        # Fallback: search method (if direct paths fail)
+        try:
+            assets = unreal.EditorAssetLibrary.list_assets("/Engine", recursive=True, include_folder=False)
+            for path in assets:
+                if "defaultnormal" in path.lower() and not path.lower().endswith(".uasset"):
+                    texture = unreal.EditorAssetLibrary.load_asset(path) 
+                    if texture and isinstance(texture, unreal.Texture2D):
+                        unreal.log(f"✅ Found default normal (fallback): {path}")
+                        return texture
+        except Exception as e:
+            unreal.log_warning(f"⚠️ Search fallback failed: {e}")
+
+        # Last resort: create a constant normal
+        unreal.log_warning("⚠️ No default normal found, using fallback")
         return None
 
     @staticmethod

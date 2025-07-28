@@ -422,7 +422,7 @@ class SubstrateMaterialBuilder:
             return self._create_regular_sample(material, param_name, x, y, uv_output)
     
     def _create_regular_sample(self, material, param_name, x, y, uv_output):
-        """Create regular texture sample"""
+        """Create regular texture sample - FIXED NORMAL HANDLING"""
         node = self.lib.create_material_expression(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y)
         node.set_editor_property("parameter_name", param_name)
         node.set_editor_property("group", self._get_param_group(param_name))
@@ -430,8 +430,26 @@ class SubstrateMaterialBuilder:
         # Set sampler type based on parameter
         if "Normal" in param_name:
             node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+            
+            # Try cached default normal first
             if self.default_normal:
                 node.set_editor_property("texture", self.default_normal)
+            else:
+                # Emergency fallback - try direct load
+                fallback_paths = [
+                    "/Engine/EngineMaterials/DefaultNormal",
+                    "/Engine/EngineResources/DefaultTextures/DefaultNormal"
+                ]
+                
+                for path in fallback_paths:
+                    emergency_normal = unreal.EditorAssetLibrary.load_asset(path)
+                    if emergency_normal:
+                        node.set_editor_property("texture", emergency_normal)
+                        unreal.log(f"🚨 Emergency normal loaded: {path}")
+                        break
+                else:
+                    unreal.log_error(f"❌ NO NORMAL TEXTURE FOUND FOR {param_name}")
+                    
         elif "Height" in param_name:
             node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_GRAYSCALE)
         
