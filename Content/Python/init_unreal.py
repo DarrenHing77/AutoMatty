@@ -32,7 +32,7 @@ class AutoMattyMainWidget(unreal.ToolMenuEntryScript):
         try:
             # Open the main AutoMatty widget
             subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
-            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
+            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/Blueprints/EUW_AutoMatty")
             
             if blueprint:
                 widget = subsystem.spawn_and_register_tab(blueprint)

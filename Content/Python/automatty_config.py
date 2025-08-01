@@ -224,7 +224,7 @@ class WidgetManager:
         """Get widget instance"""
         try:
             subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
-            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
+            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/Blueprints/EUW_AutoMatty")
             return subsystem.find_utility_widget_from_blueprint(blueprint) if blueprint else None
         except:
             return None
@@ -445,7 +445,7 @@ class AutoMattyMainMenuScript(unreal.ToolMenuEntryScript):
     def execute(self, context):
         try:
             subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
-            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
+            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/Blueprints/EUW_AutoMatty")
             if blueprint:
                 subsystem.spawn_and_register_tab(blueprint)
                 unreal.log("🎯 AutoMatty main widget opened")
@@ -508,7 +508,7 @@ class AutoMattySettingsScript(unreal.ToolMenuEntryScript):
     def execute(self, context):
         try:
             subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
-            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/EUW_AutoMatty")
+            blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/Blueprints/EUW_AutoMatty")
             if blueprint:
                 widget = subsystem.spawn_and_register_tab(blueprint)
                 unreal.log("🎯 AutoMatty settings opened")
