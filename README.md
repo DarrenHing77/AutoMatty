@@ -4,6 +4,8 @@
 
 AutoMatty streamlines Substrate material creation and management with intelligent texture matching, smart naming, and automated workflows. Built for 3D artists who quick materials on the fly without libraries and tedious asset migration. Not aimed at game use although there are basic to overkill options
 
+https://drive.google.com/file/d/1STtd5BEGBTqlvhe9qh0VeEomb5CUbEKh/view?usp=sharing
+
 **--THIS IS IN BETA - EXPECT ISSUES--** 
 
 (let me know what they are though and I'll try my best to address them in a timely manner)
