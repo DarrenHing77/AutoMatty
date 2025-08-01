@@ -100,6 +100,8 @@ def main():
     """Main function called on startup"""
     unreal.log("🚀 AutoMatty startup script running...")
     register_automatty_menus()
+    from automatty_config import AutoMattyMenuManager
+    AutoMattyMenuManager.register_main_menu()
 
 # Run the registration
 if __name__ == '__main__':

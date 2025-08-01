@@ -937,9 +937,5 @@ def open_texture_path_in_browser():
     else:
         unreal.log_warning("⚠️ No texture path set")
 
-# ========================================
-# INITIALIZE UE 5.6 NATIVE MENU SYSTEM
-# ========================================
 
-# Initialize the clean menu system
-AutoMattyMenuManager.register_main_menu()
+
