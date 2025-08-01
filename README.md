@@ -1,6 +1,6 @@
 # AutoMatty v1.0 🎨
 
-**Smart material automation for Unreal Engine 5.6**
+**Material automation for Unreal Engine 5.6**
 
 AutoMatty streamlines Substrate material creation and management with intelligent texture matching, smart naming, and automated workflows. Built for 3D artists who quick materials on the fly without libraries and tedious asset migration. Not aimed at game use although there are basic to overkill options
 
