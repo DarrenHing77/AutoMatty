@@ -44,8 +44,8 @@ py -m pip install unreal-qt
 ## 📦 Installation
 
 1. Copy **AutoMatty** folder to `YourProject/Plugins/`
-2. **Restart Unreal Editor**
-3. 
+2. Enable plugin 
+3.**Restart Unreal Editor**
 4. **AutoMatty** should be on the tools menu at the top and also in a dropdown on the toolbar(next to platforms)
 
 ---
