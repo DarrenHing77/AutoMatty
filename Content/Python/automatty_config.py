@@ -551,9 +551,7 @@ class AutoMattyMenuManager:
                 ("AutoMattyCreateInstance", "Create Material Instance", "Smart material instance with auto texture matching", AutoMattyCreateInstanceScript, "QuickCreate"),
                 
                 # Utilities
-                ("AutoMattyRepath", "Repath Textures", "Batch repath material instance textures", AutoMattyRepathScript, "Utilities"),
-                ("AutoMattySettings", "Settings", "Configure AutoMatty paths and preferences", AutoMattySettingsScript, "Utilities"),
-            ]
+                ("AutoMattyRepath", "Repath Textures", "Batch repath material instance textures", AutoMattyRepathScript, "Utilities"),]
             
             # Register menu scripts for dropdown items
             for entry_name, label, tooltip, script_class, section in menu_items:
