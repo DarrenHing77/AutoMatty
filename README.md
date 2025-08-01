@@ -2,7 +2,11 @@
 
 **Smart material automation for Unreal Engine 5.6**
 
-AutoMatty streamlines Substrate material creation and management with intelligent texture matching, smart naming, and automated workflows. Built for 3D artists who want powerful materials without the tedium.
+AutoMatty streamlines Substrate material creation and management with intelligent texture matching, smart naming, and automated workflows. Built for 3D artists who quick materials on the fly without libraries and tedious asset migration. Not aimed at game use although there are basic to overkill options
+
+** THIS IS IN ALPHA - EXPECT ISSUES ** 
+
+(let me know what they are though!)
 
 ---
 
@@ -41,7 +45,8 @@ py -m pip install unreal-qt
 
 1. Copy **AutoMatty** folder to `YourProject/Plugins/`
 2. **Restart Unreal Editor**
-3. Look for **AutoMatty** button in the main toolbar
+3. 
+4. **AutoMatty** should be on the tools menu at the top and also in a dropdown on the toolbar(next to platforms)
 
 ---
 
@@ -51,9 +56,9 @@ py -m pip install unreal-qt
 
 **What they do:** Create complete Substrate materials with proper node networks, parameters, and optimizations.
 
-- **ORM Materials** - Packed Occlusion/Roughness/Metallic workflow (most common)
+- **ORM Materials** - Packed Occlusion/Roughness/Metallic workflow
 - **Split Materials** - Individual texture channels (Color, Normal, Roughness, Metallic)
-- **Environment Materials** - Advanced A/B blending for landscapes and complex surfaces
+- **Environment Materials** - Basically an blend material for mixing 2 looks
 
 **Features available:**
 - ✅ **Nanite Displacement** - Real height-based geometry displacement
@@ -72,10 +77,7 @@ py -m pip install unreal-qt
 - `Wood_ORM_1001.jpg` → **ORM** parameter
 - `Wood_Height_1001.jpg` → **Height** parameter (if Nanite enabled)
 
-**Works with:**
-- Content browser texture selection
-- Import dialog (select textures to import)
-- Existing texture folders
+Triggers import dialog (select textures to import)
 
 ### 🔄 Texture Repather
 
@@ -86,22 +88,18 @@ py -m pip install unreal-qt
 - Update materials with new texture variations
 - Replace placeholder textures with final assets
 
-**Smart matching:**
-- Version-agnostic (`Wood_v001.jpg` matches `Wood_v002.jpg`)
-- Type-aware (preserves Normal → Normal, Color → Color mapping)
-- Handles texture variations and height maps
 
-### 🎛️ Material Editor (Advanced)
+### 🎛️ Material Editor
 
-**What it does:** Visual parameter editor with real-time feedback (requires unreal-qt).
+**What it does:** A parameter editor similar to the built-in UE version but selection based. (requires unreal-qt)
 
 **Features:**
+- **Dropdown Slots Menu** - lists all materials assigned to the current selection allowing you to easily switch and adjust multi-material assets 
 - **Drag-value boxes** - Click and drag to adjust values
 - **Visual sliders** with progress bar fills
 - **Parameter grouping** - Organized by Color, Roughness, UV Controls, etc.
 - **Override toggles** - Enable/disable parameter overrides
-- **Conflict detection** - Warns about incompatible parameter combinations
-- **Master material protection** - Prevents accidental changes to master materials
+
 
 **Controls:**
 - **Drag** - Change values
@@ -117,10 +115,14 @@ py -m pip install unreal-qt
 
 ### Creating Materials
 
-1. **Click AutoMatty toolbar button** → Choose material type
-2. **Select textures** (optional) - from Content Browser or import new ones
-3. **Enable features** - Check boxes for Nanite, Triplanar, etc.
-4. **Click Create** - Material appears in your Materials folder
+(skip step 1 and 2 if you're not using substrate and the builders included and just want to use your own material)
+
+1.**Choose features** - Check boxes for Nanite, Triplanar, etc.
+2. **Set Paths** - Where tos store materials, textures and material name prefix
+3.**Create master material** → Choose material type(ORM or split)
+4. **Select master and click create instance** - triggers import dialog where you can select textures
+5. **Select textures** - new instance is created in same location as master material
+
 
 ### Making Instances
 
@@ -172,15 +174,17 @@ AutoMatty recognizes these patterns:
 - **Height:** `*height*`, `*displacement*`, `*disp*`
 - **Emission:** `*emission*`, `*emissive*`, `*glow*`
 
+(I will update this in future so you can set your own custom patterns)
+
 ### Environment Materials
 - **Simple:** A/B texture blending with blend mask
-- **Advanced:** Separate material layers with world-space mixing
-- Supports height blending for realistic terrain transitions
+- **Advanced:** Separate material BSDF layers with world-space mixing
+- Supports height blending for better transitions
 
 ### Texture Variation
 - Uses Unreal's TextureVariation material function
 - Requires variation height map for randomization
-- Automatically breaks up tiling patterns
+- Automatically breaks up tiling patterns when using UVs
 
 ---
 
@@ -191,9 +195,8 @@ AutoMatty recognizes these patterns:
 - Or select **Material Instance** to edit parameters
 
 ### "No textures found"
-- Make sure texture names match patterns (Color, Normal, etc.)
-- Try importing textures first, then creating instance
-- Check texture path in AutoMatty settings
+- Make sure texture names match patterns match the above patterns
+
 
 ### Material Editor won't open
 - **First try:** `pip install unreal-qt` (might work)
@@ -218,22 +221,9 @@ AutoMatty recognizes these patterns:
 ## 🎯 Workflow Examples
 
 ### Standard PBR Material
-1. Import textures: `Wood_Color.jpg`, `Wood_Normal.jpg`, `Wood_ORM.jpg`
-2. AutoMatty → **Create ORM Material**
-3. AutoMatty → **Create Material Instance** 
+1. AutoMatty → **Create Split Material**
+2. AutoMatty → **Create Material Instance** 
 4. Result: Complete PBR material with proper parameters
-
-### Nanite Landscape Material  
-1. Import: `Rock_Color.jpg`, `Rock_Normal.jpg`, `Rock_Height.jpg`
-2. AutoMatty → **Create ORM Material**
-3. ✅ **Enable Nanite** checkbox
-4. Create → Material supports real displacement
-
-### Environment Blending
-1. Import: `GrassA_Color.jpg`, `GrassB_Color.jpg`, `Blend_Mask.jpg`, etc.
-2. AutoMatty → **Create Environment Material**
-3. ✅ **Enable Advanced Environment**
-4. Result: World-space blended material perfect for landscapes
 
 ---
 
