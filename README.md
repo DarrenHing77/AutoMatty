@@ -1,7 +1,9 @@
-AutoMatty v0.1.0 🎨
+**AutoMatty v0.1.0 🎨**
 A comprehensive material automation toolkit for Unreal Engine 5.6
-AutoMatty streamlines material creation and management workflows with intelligent texture matching, smart naming, and flexible path configuration.
+AutoMatty streamlines subtrate material creation and management workflows with intelligent texture matching, smart naming, and flexible path configuration.
+
 ✨ Features
+
 Material Builders
 
 ORM Materials: Packed Occlusion/Roughness/Metallic workflow
@@ -63,6 +65,7 @@ Substrate must be enabled in project settings
 Some material parameter APIs changed in UE 5.6 (handled automatically)
 
 🤝 Contributing
+
 Built for internal use but designed with extensibility in mind. The modular architecture makes it easy to add new material types and workflows.
 
 Note: This plugin uses UE 5.6's Python API and may require updates for future engine versions.
