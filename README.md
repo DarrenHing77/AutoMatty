@@ -20,15 +20,19 @@ The **Material Editor** provides visual sliders and real-time parameter editing.
 1. **Press Windows Key + R**
 2. **Type:** `cmd` 
 3. **Press Enter** (opens black command window)
-4. **Type:** `pip install unreal-qt`
+4. **Copy and paste this command** (replace UE_5.6 with your version):
+   ```
+   "C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\ThirdParty\Python3\Win64\python.exe" -m pip install unreal-qt
+   ```
 5. **Press Enter** and wait for "Successfully installed"
 6. **Restart Unreal Editor**
 
-**If that doesn't work, try these commands instead:**
+**Alternative (if above is too long):**
+Try these simpler commands first - they might work:
 ```bash
+pip install unreal-qt
 python -m pip install unreal-qt
-py -m pip install unreal-qt  
-pip install unreal-qt --user
+py -m pip install unreal-qt
 ```
 
 ---
@@ -192,8 +196,12 @@ AutoMatty recognizes these patterns:
 - Check texture path in AutoMatty settings
 
 ### Material Editor won't open
-- Install unreal-qt: `pip install unreal-qt`
-- Restart Unreal Editor
+- **First try:** `pip install unreal-qt` (might work)
+- **If that fails:** Use UE's Python directly:
+  ```
+  "C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\ThirdParty\Python3\Win64\python.exe" -m pip install unreal-qt
+  ```
+- **Always restart** Unreal Editor after installing
 - Check Output Log for detailed error messages
 
 ### Nanite displacement not working
