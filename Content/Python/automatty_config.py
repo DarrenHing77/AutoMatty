@@ -363,28 +363,56 @@ class ButtonActionManager:
 # ========================================
 
 def ensure_unreal_qt():
-    """Auto-install unreal_qt if missing"""
+    """Auto-install unreal_qt if missing with enhanced logging"""
     try:
         import unreal_qt
+        unreal.log("✅ unreal-qt already available")
         return True
     except ImportError:
-        unreal.log("📦 Installing unreal-qt dependency...")
+        unreal.log("📦 unreal-qt not found, installing...")
         
         import subprocess
+        import sys
         python_exe = sys.executable
         
+        # Show what Python we're using
+        unreal.log(f"🐍 Using Python: {python_exe}")
+        
         try:
+            unreal.log("⏳ Running pip install unreal-qt...")
             result = subprocess.run([
                 python_exe, "-m", "pip", "install", "unreal-qt"
             ], capture_output=True, text=True, check=True)
             
-            unreal.log("✅ unreal-qt installed successfully!")
-            return True
+            unreal.log("✅ pip install completed successfully!")
+            
+            # Log pip output if verbose
+            if result.stdout:
+                unreal.log(f"📋 pip stdout: {result.stdout.strip()}")
+            
+            # Test the install actually worked
+            try:
+                import unreal_qt
+                unreal.log("🎉 unreal-qt import successful after install!")
+                return True
+            except ImportError as import_err:
+                unreal.log_error(f"❌ Install succeeded but import still fails: {import_err}")
+                unreal.log_error("💡 Try restarting Unreal Editor")
+                return False
             
         except subprocess.CalledProcessError as e:
-            unreal.log_error(f"❌ Failed to install unreal-qt: {e}")
+            unreal.log_error(f"❌ pip install failed with code {e.returncode}")
+            if e.stdout:
+                unreal.log_error(f"📋 stdout: {e.stdout}")
+            if e.stderr:
+                unreal.log_error(f"📋 stderr: {e.stderr}")
+            unreal.log_error("💡 Try manual install: pip install unreal-qt")
             return False
-
+        except Exception as e:
+            unreal.log_error(f"❌ Unexpected error during install: {e}")
+            return False
+        
+    
 def show_material_editor():
     """Show material editor with dependency handling"""
     try:
@@ -551,9 +579,7 @@ class AutoMattyMenuManager:
                 ("AutoMattyCreateInstance", "Create Material Instance", "Smart material instance with auto texture matching", AutoMattyCreateInstanceScript, "QuickCreate"),
                 
                 # Utilities
-                ("AutoMattyRepath", "Repath Textures", "Batch repath material instance textures", AutoMattyRepathScript, "Utilities"),
-                ("AutoMattySettings", "Settings", "Configure AutoMatty paths and preferences", AutoMattySettingsScript, "Utilities"),
-            ]
+                ("AutoMattyRepath", "Repath Textures", "Batch repath material instance textures", AutoMattyRepathScript, "Utilities"),]
             
             # Register menu scripts for dropdown items
             for entry_name, label, tooltip, script_class, section in menu_items:
