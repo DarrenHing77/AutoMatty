@@ -6,7 +6,7 @@ AutoMatty streamlines Substrate material creation and management with intelligen
 
 ** THIS IS IN ALPHA - EXPECT ISSUES ** 
 
-(let me know what they are though!)
+(let me know what they are though and I'll try my best to address them in a timely manner)
 
 ---
 
@@ -18,7 +18,7 @@ AutoMatty streamlines Substrate material creation and management with intelligen
 - **Python Plugin enabled** (Edit → Plugins → Python)
 
 ### Material Editor Setup (Optional but Recommended)
-The **Material Editor** provides visual sliders and real-time parameter editing.
+The **Material Editor** is probably 1 of my favorite features as it makes working with instance parameters a little more convenient
 
 **Installation Steps:**
 1. **Press Windows Key + R**
@@ -186,9 +186,25 @@ AutoMatty recognizes these patterns:
 - Requires variation height map for randomization
 - Automatically breaks up tiling patterns when using UVs
 
+
 ---
 
-## 🔧 Troubleshooting
+## 🎯 Workflow Example
+
+### Standard PBR Material
+1. AutoMatty → **Create Split Material**
+2. AutoMatty → **Create Material Instance** 
+4. Result: Complete PBR material with proper parameters
+
+---
+
+## 🔧 Issues/Troubleshooting
+
+- **Check Output Log** (Window → Output Log) for detailed error messages
+- **Material Editor issues:** Usually unreal-qt installation problems
+- **Texture matching issues:** Check naming conventions above
+- **Path issues:** Use `/Game/` prefix for all paths
+
 
 ### "Select exactly one Material asset"
 - You need to select a **Material** (not Material Instance) to create instances
@@ -199,8 +215,8 @@ AutoMatty recognizes these patterns:
 
 
 ### Material Editor won't open
-- **First try:** `pip install unreal-qt` (might work)
-- **If that fails:** Use UE's Python directly:
+
+ - ** install unreal_qt**
   ```
   "C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\ThirdParty\Python3\Win64\python.exe" -m pip install unreal-qt
   ```
@@ -216,22 +232,3 @@ AutoMatty recognizes these patterns:
 - Project Settings → Rendering → Materials → Substrate
 - Restart editor after enabling
 
----
-
-## 🎯 Workflow Examples
-
-### Standard PBR Material
-1. AutoMatty → **Create Split Material**
-2. AutoMatty → **Create Material Instance** 
-4. Result: Complete PBR material with proper parameters
-
----
-
-## 🤝 Support
-
-- **Check Output Log** (Window → Output Log) for detailed error messages
-- **Material Editor issues:** Usually unreal-qt installation problems
-- **Texture matching issues:** Check naming conventions above
-- **Path issues:** Use `/Game/` prefix for all paths
-
-Built for UE 5.6 Substrate system. May require updates for future engine versions.
