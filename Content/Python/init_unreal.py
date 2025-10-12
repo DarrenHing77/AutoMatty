@@ -1,5 +1,5 @@
 """
-AutoMatty Menu Registration - PROPER IMPLEMENTATION
+AutoMatty Menu Registration - FIXED NO DUPLICATES
 This file should be placed at: AutoMatty/Content/Python/init_unreal.py
 Runs ONCE on editor startup, avoiding class registration conflicts
 """
@@ -47,9 +47,10 @@ class AutoMattyMainWidget(unreal.ToolMenuEntryScript):
             unreal.log_error(f"❌ Failed to open AutoMatty widget: {e}")
 
 def register_automatty_menus():
-    """Register AutoMatty menu entries"""
+    """Register AutoMatty Tools menu entries - NO DUPLICATES"""
     try:
-        # Get the Tools menu
+        # Tools menu gets ONLY the main widget and material editor
+        # Toolbar gets everything else
         menus = unreal.ToolMenus.get()
         tools_menu = menus.find_menu("LevelEditor.MainMenu.Tools")
         
@@ -57,25 +58,25 @@ def register_automatty_menus():
             unreal.log_error("❌ Could not find Tools menu")
             return False
         
-        # 1. MAIN WIDGET ENTRY
+        # 1. MAIN WIDGET ENTRY (Tools menu version)
         widget_script = AutoMattyMainWidget()
         widget_script.init_entry(
-            owner_name="AutoMatty",
+            owner_name="AutoMattyTools",  # Different owner to avoid conflicts
             menu="LevelEditor.MainMenu.Tools", 
             section="LevelEditorModules",
-            name="AutoMattyWidget",
+            name="AutoMattyWidgetTools",  # Different name
             label="AutoMatty",
             tool_tip="Open AutoMatty main widget"
         )
         widget_script.register_menu_entry()
         
-        # 2. MATERIAL EDITOR ENTRY  
+        # 2. MATERIAL EDITOR ENTRY (Tools menu version)
         editor_script = AutoMattyMaterialEditor()
         editor_script.init_entry(
-            owner_name="AutoMatty",
+            owner_name="AutoMattyTools",  # Different owner
             menu="LevelEditor.MainMenu.Tools", 
             section="LevelEditorModules", 
-            name="AutoMattyMaterialEditor",
+            name="AutoMattyMaterialEditorTools",  # Different name
             label="AutoMatty Material Editor",
             tool_tip="Open AutoMatty Material Instance Editor"
         )
@@ -84,24 +85,19 @@ def register_automatty_menus():
         # Refresh menus
         menus.refresh_all_widgets()
         
-        unreal.log("✅ AutoMatty menu entries registered!")
-        unreal.log("📋 Available in Tools menu:")
-        unreal.log("   • AutoMatty (main widget)")
-        unreal.log("   • AutoMatty Material Editor")
-        unreal.log("💡 Set hotkeys: Edit → Editor Preferences → Keyboard Shortcuts → Search 'AutoMatty'")
-        
+        unreal.log("✅ AutoMatty Tools menu entries registered!")
         return True
         
     except Exception as e:
-        unreal.log_error(f"❌ Menu registration failed: {e}")
+        unreal.log_error(f"❌ Tools menu registration failed: {e}")
         return False
 
 def main():
     """Main function called on startup"""
     unreal.log("🚀 AutoMatty startup script running...")
-    register_automatty_menus()
+    register_automatty_menus()  # Tools menu items
     from automatty_config import AutoMattyMenuManager
-    AutoMattyMenuManager.register_main_menu()
+    AutoMattyMenuManager.register_main_menu()  # Toolbar dropdown
 
 # Run the registration
 if __name__ == '__main__':
