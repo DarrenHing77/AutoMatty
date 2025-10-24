@@ -172,25 +172,9 @@ class DragValueBox(QWidget):
         self.finish_editing()
     
     def wheelEvent(self, event):
-        """Handle mouse wheel"""
-        modifiers = QApplication.keyboardModifiers()
-        
-        # Determine step size
-        if modifiers & Qt.ShiftModifier:
-            step = 0.001  # Fine
-        elif modifiers & Qt.ControlModifier:
-            step = 0.01   # Coarse
-        else:
-            step = 0.01   # Normal
-        
-        # Apply wheel direction
-        delta = event.angleDelta().y()
-        if delta > 0:
-            self.set_value(self.current_val + step)
-        else:
-            self.set_value(self.current_val - step)
-        
-        event.accept()
+        """Handle mouse wheel - DISABLED to prevent accidental changes while scrolling UI"""
+        # Ignore wheel events to prevent accidental value changes
+        event.ignore()
     
     def keyPressEvent(self, event):
         """Handle keyboard input"""
@@ -339,11 +323,10 @@ class ParameterSlider(QWidget):
         # Enhanced tooltip
         tooltip_text = (f"{param_name}\n\n"
                        "💡 Drag to change value\n"
-                       "• Normal: Regular speed\n" 
+                       "• Normal: Regular speed\n"
                        "• Shift: Fine control (5x slower)\n"
                        "• Ctrl: Coarse control (5x faster)\n"
                        "• Double-click: Manual input\n"
-                       "• Mouse wheel: Adjust value\n"
                        "• Checkbox: Override parameter")
         self.value_box.setToolTip(tooltip_text)
         
@@ -493,7 +476,7 @@ class ColorPicker(QWidget):
 class SwitchParameter(QWidget):
     switch_changed = Signal(str, bool)
     override_changed = Signal(str, bool)
-    
+
     def __init__(self, param_name, current_value=False, is_overridden=True, parent=None):
         super().__init__(parent)
         self.param_name = param_name
@@ -502,33 +485,69 @@ class SwitchParameter(QWidget):
         self.instance_value = current_value
         self.parent_value = current_value
         self.is_overridden = is_overridden
-        
+
+        # Use a splitter for resizable columns (matching ParameterSlider layout)
+        self.splitter = QSplitter(Qt.Horizontal)
+
+        # Create main layout
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
-        
+        layout.addWidget(self.splitter)
+
+        # Parameter name widget with override checkbox
+        name_widget = QWidget()
+        name_layout = QHBoxLayout(name_widget)
+        name_layout.setContentsMargins(5, 0, 5, 0)
+
         # Override checkbox
         self.override_checkbox = QCheckBox()
         self.override_checkbox.setChecked(self.is_overridden)
         self.override_checkbox.setMaximumWidth(20)
         self.override_checkbox.setToolTip("Override parameter")
         self.override_checkbox.toggled.connect(self.on_override_toggled)
-        
-        # Parameter name
+
         self.label = QLabel(param_name)
-        self.label.setMinimumWidth(100)
+        self.label.setMinimumWidth(80)
+        self.label.setMaximumWidth(200)
         self.label.setObjectName("ParamLabel")
-        
-        # Switch checkbox
+        self.label.setToolTip(param_name)
+        self.label.setWordWrap(False)
+        self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        name_layout.addWidget(self.override_checkbox)
+        name_layout.addWidget(self.label)
+        name_layout.addStretch()
+
+        # Switch checkbox widget
+        switch_widget = QWidget()
+        switch_layout = QHBoxLayout(switch_widget)
+        switch_layout.setContentsMargins(5, 0, 5, 0)
+
         self.switch_checkbox = QCheckBox()
         self.switch_checkbox.setChecked(current_value)
         self.switch_checkbox.toggled.connect(self.on_switch_changed)
-        
-        layout.addWidget(self.override_checkbox)
-        layout.addWidget(self.label)
-        layout.addWidget(self.switch_checkbox)
-        layout.addStretch()
-        
+
+        switch_layout.addWidget(self.switch_checkbox)
+
+        # Empty widget for spacing (matches reset button column in ParameterSlider)
+        spacer_widget = QWidget()
+        spacer_layout = QHBoxLayout(spacer_widget)
+        spacer_layout.setContentsMargins(5, 0, 5, 0)
+        spacer_layout.addWidget(QLabel(""))  # Empty label for alignment
+
+        # Add widgets to splitter
+        self.splitter.addWidget(name_widget)
+        self.splitter.addWidget(switch_widget)
+        self.splitter.addWidget(spacer_widget)
+
+        # Set splitter proportions (matching ParameterSlider)
+        self.splitter.setStretchFactor(0, 4)  # Name column
+        self.splitter.setStretchFactor(1, 1)  # Switch checkbox
+        self.splitter.setStretchFactor(2, 0)  # Spacer column
+
+        # Set initial sizes (matching ParameterSlider)
+        self.splitter.setSizes([160, 80, 30])
+
         self.update_override_state()
         
     def on_override_toggled(self, checked):
@@ -571,7 +590,12 @@ class MaterialInstanceEditor(QWidget):
         self.setWindowTitle("Material Instance Editor")
         self.setMinimumSize(350, 400)
         self.resize(400, 600)
-        
+
+        # Theme colors
+        self.theme_color = "#33459c"
+        self.theme_color_dark = "#2a3780"
+        self.theme_color_light = "#4156b3"
+
         # Data
         self.current_materials = []
         self.current_instance = None
@@ -579,9 +603,9 @@ class MaterialInstanceEditor(QWidget):
         self.sections = {}
         self.is_master_material = False
         self.master_warnings_disabled = set()
-        
+
         self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
-        
+
         self.init_ui()
         self.apply_styles()
         
@@ -589,65 +613,114 @@ class MaterialInstanceEditor(QWidget):
         # Main layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
-        
+        layout.setSpacing(12)
+
         # Header
         header_layout = QHBoxLayout()
-        title = QLabel("Material Instance Editor")
+        title = QLabel("🎨 Material Instance Editor")
         title.setObjectName("Title")
-        
-        # Open Master button
-        open_master_btn = QPushButton("Open Master")
-        open_master_btn.setObjectName("OpenMasterButton")
-        open_master_btn.clicked.connect(self.open_master_material)
-        
-        close_btn = QPushButton("×")
-        close_btn.setObjectName("CloseButton")
-        close_btn.setMaximumWidth(30)
-        close_btn.clicked.connect(self.close)
-        
+
+        self.status_label = QLabel("Ready")
+        self.status_label.setObjectName("StatusLabel")
+
         header_layout.addWidget(title)
-        header_layout.addStretch()
-        header_layout.addWidget(open_master_btn)
-        header_layout.addWidget(close_btn)
-        
+        header_layout.addWidget(self.status_label, 1)
+        layout.addLayout(header_layout)
+
+        # Material selection section
+        material_section = QLabel("🎯 Material Selection")
+        material_section.setObjectName("SectionHeader")
+        layout.addWidget(material_section)
+
+        # Actor selection row
+        actor_row = QHBoxLayout()
+        actor_label = QLabel("Actor:")
+        actor_label.setObjectName("FieldLabel")
+
+        self.actor_dropdown = QComboBox()
+        self.actor_dropdown.setObjectName("Dropdown")
+        self.actor_dropdown.currentIndexChanged.connect(self.on_actor_selected)
+
+        self.show_all_checkbox = QCheckBox("Show All")
+        self.show_all_checkbox.setChecked(True)
+        self.show_all_checkbox.setObjectName("Checkbox")
+        self.show_all_checkbox.toggled.connect(self.on_show_all_toggled)
+
+        actor_row.addWidget(actor_label)
+        actor_row.addWidget(self.actor_dropdown, 1)
+        actor_row.addWidget(self.show_all_checkbox)
+        layout.addLayout(actor_row)
+
         # Material dropdown
+        material_label = QLabel("Material:")
+        material_label.setObjectName("FieldLabel")
         self.material_dropdown = QComboBox()
-        self.material_dropdown.setObjectName("MaterialDropdown")
+        self.material_dropdown.setObjectName("Dropdown")
         self.material_dropdown.currentIndexChanged.connect(self.on_material_selected)
-        
+
+        material_row = QHBoxLayout()
+        material_row.addWidget(material_label)
+        material_row.addWidget(self.material_dropdown, 1)
+        layout.addLayout(material_row)
+
+        # Separator
+        separator1 = QFrame()
+        separator1.setFrameShape(QFrame.HLine)
+        separator1.setObjectName("Separator")
+        layout.addWidget(separator1)
+
+        # Parameters section
+        params_section_layout = QHBoxLayout()
+        params_section = QLabel("🎛️ Parameters")
+        params_section.setObjectName("SectionHeader")
+        params_section_layout.addWidget(params_section)
+        params_section_layout.addStretch()
+
+        # Create Instance button (only shown for master materials)
+        self.create_instance_btn = QPushButton("Create Instance")
+        self.create_instance_btn.setObjectName("SecondaryButton")
+        self.create_instance_btn.clicked.connect(self.create_instance_from_master_and_replace)
+        self.create_instance_btn.setVisible(False)
+        params_section_layout.addWidget(self.create_instance_btn)
+
+        # Open Master button
+        self.open_master_btn = QPushButton("Open Master")
+        self.open_master_btn.setObjectName("SecondaryButton")
+        self.open_master_btn.clicked.connect(self.open_master_material)
+        params_section_layout.addWidget(self.open_master_btn)
+
+        layout.addLayout(params_section_layout)
+
         # Scroll area for parameters
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setObjectName("ScrollArea")
-        
+
         # Parameters widget
         self.params_widget = QWidget()
         self.params_layout = QVBoxLayout(self.params_widget)
         self.params_layout.setContentsMargins(5, 5, 5, 5)
         self.params_layout.setSpacing(5)
         self.params_layout.addStretch()
-        
+
         scroll.setWidget(self.params_widget)
-        
+
         # Action buttons
         button_layout = QHBoxLayout()
-        refresh_btn = QPushButton("Refresh Selection")
+        refresh_btn = QPushButton("🔄 Refresh Selection")
         refresh_btn.setObjectName("ActionButton")
         refresh_btn.clicked.connect(self.refresh_from_selection)
-        
-        reset_all_btn = QPushButton("Reset All")
+
+        reset_all_btn = QPushButton("↺ Reset All")
         reset_all_btn.setObjectName("ActionButton")
         reset_all_btn.clicked.connect(self.reset_all_parameters)
-        
+
         button_layout.addWidget(refresh_btn)
         button_layout.addWidget(reset_all_btn)
-        
+
         # Add to main layout
-        layout.addLayout(header_layout)
-        layout.addWidget(self.material_dropdown)
         layout.addWidget(scroll, 1)
         layout.addLayout(button_layout)
         
@@ -847,32 +920,83 @@ class MaterialInstanceEditor(QWidget):
     def load_materials(self, material_list):
         """Load materials from selected mesh into dropdown"""
         self.current_materials = material_list
-        
-        # Update dropdown
-        self.material_dropdown.clear()
-        for mat_info in material_list:
-            mat_type = mat_info.get('type', 'Unknown')
-            display_name = f"{mat_info['actor']} - {mat_info['name']} ({mat_type}) (Slot {mat_info['slot']})"
-            self.material_dropdown.addItem(display_name, mat_info)
-        
+
+        # Extract unique actors (remove " (instance)" from actor names)
+        actors = list(set([mat['actor'].replace(' (instance)', '') for mat in material_list]))
+        actors.sort()
+
+        # Populate actor dropdown
+        self.actor_dropdown.blockSignals(True)
+        self.actor_dropdown.clear()
+        for actor in actors:
+            self.actor_dropdown.addItem(actor)
+        self.actor_dropdown.blockSignals(False)
+
+        # Update material dropdown
+        self.update_material_dropdown()
+
         # Load first material if available
         if material_list:
-            self.load_material_instance(material_list[0]['instance'])
+            self.status_label.setText(f"✓ Loaded {len(material_list)} material{'s' if len(material_list) > 1 else ''}")
             unreal.log(f"🎯 Loaded {len(material_list)} material instances")
     
+    def update_material_dropdown(self):
+        """Update material dropdown based on current actor filter"""
+        self.material_dropdown.blockSignals(True)
+        self.material_dropdown.clear()
+
+        show_all = self.show_all_checkbox.isChecked()
+        current_actor = self.actor_dropdown.currentText()
+
+        # Filter materials
+        filtered_materials = []
+        for mat_info in self.current_materials:
+            actor_name = mat_info['actor'].replace(' (instance)', '')
+            if show_all or actor_name == current_actor:
+                filtered_materials.append(mat_info)
+
+        # Store filtered list for material selection
+        self.filtered_materials = filtered_materials
+
+        # Populate dropdown with simplified names
+        for mat_info in filtered_materials:
+            mat_type = mat_info.get('type', 'Unknown')
+            # Simplified display: just material name and type
+            display_name = f"{mat_info['name']} ({mat_type})"
+            self.material_dropdown.addItem(display_name)
+
+        self.material_dropdown.blockSignals(False)
+
+        # Load first material if available
+        if filtered_materials:
+            self.load_material_instance(filtered_materials[0]['instance'])
+
+    def on_actor_selected(self, index):
+        """Handle actor dropdown selection"""
+        if not self.show_all_checkbox.isChecked():
+            self.update_material_dropdown()
+
+    def on_show_all_toggled(self, checked):
+        """Handle 'Show All' checkbox toggle"""
+        self.actor_dropdown.setEnabled(not checked)
+        self.update_material_dropdown()
+
     def on_material_selected(self, index):
         """Handle material dropdown selection"""
-        if index >= 0 and index < len(self.current_materials):
-            material_info = self.current_materials[index]
+        if hasattr(self, 'filtered_materials') and index >= 0 and index < len(self.filtered_materials):
+            material_info = self.filtered_materials[index]
             self.load_material_instance(material_info['instance'])
     
     def load_material_instance(self, instance):
         """Load material with master/instance detection"""
         self.current_instance = instance
-        
+
         # Check if this is a master material
         self.is_master_material = isinstance(instance, unreal.Material)
-        
+
+        # Show/hide Create Instance button based on material type
+        self.create_instance_btn.setVisible(self.is_master_material)
+
         if self.is_master_material:
             self.show_master_material_warning()
             unreal.log(f"⚠️ Loading MASTER material: {instance.get_name()}")
@@ -985,9 +1109,11 @@ class MaterialInstanceEditor(QWidget):
                     self.params_layout.insertWidget(self.params_layout.count() - 1, section)
             
             param_count = len(scalar_params) + len(vector_params) + len(switch_params)
+            self.status_label.setText(f"✓ {param_count} parameters loaded")
             unreal.log(f"✅ Loaded {param_count} parameters ({len(scalar_params)} scalar, {len(vector_params)} vector, {len(switch_params)} switch)")
-            
+
         except Exception as e:
+            self.status_label.setText("❌ Failed to load parameters")
             unreal.log_error(f"❌ Failed to load material parameters: {e}")
     
     def group_parameters(self, scalar_params, vector_params, switch_params):
@@ -1133,38 +1259,119 @@ class MaterialInstanceEditor(QWidget):
         except Exception as e:
             unreal.log_warning(f"⚠️ Failed to set parameter {param_name}: {e}")
 
-    def create_instance_from_master(self):
-        """Auto-create material instance from master material"""
+    def create_instance_from_master_and_replace(self):
+        """Create instance from master and replace it on all actors using the master"""
+        if not self.is_master_material:
+            unreal.log_warning("⚠️ Current material is not a master material")
+            return
+
         try:
             base_material = self.current_instance
-            
-            # Generate unique name
-            mi_name = f"MI_{base_material.get_name()}_Auto"
-            mi_path = "/Game/Materials/"
-            
+            master_path = base_material.get_path_name()
+            master_folder = '/'.join(master_path.split('/')[:-1])
+
+            # Generate unique name in same folder as master
+            mi_name = f"MI_{base_material.get_name()}"
+
             # Create the instance
             atools = unreal.AssetToolsHelpers.get_asset_tools()
             mi_factory = unreal.MaterialInstanceConstantFactoryNew()
-            
+
+            new_instance = atools.create_asset(
+                mi_name, master_folder, unreal.MaterialInstanceConstant, mi_factory
+            )
+
+            # Set parent
+            unreal.MaterialEditingLibrary.set_material_instance_parent(new_instance, base_material)
+
+            # Save the new instance
+            unreal.EditorAssetLibrary.save_asset(new_instance.get_path_name())
+
+            # Replace master material on all actors in current selection
+            replaced_count = 0
+            for mat_info in self.current_materials:
+                if mat_info['instance'] == base_material:
+                    # This is the master material - replace it
+                    try:
+                        # Find the actor and component
+                        editor_actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+                        selected_actors = editor_actor_subsystem.get_selected_level_actors()
+
+                        for actor in selected_actors:
+                            if isinstance(actor, (unreal.StaticMeshActor, unreal.SkeletalMeshActor)):
+                                if isinstance(actor, unreal.StaticMeshActor):
+                                    mesh_component = actor.get_component_by_class(unreal.StaticMeshComponent)
+                                else:
+                                    mesh_component = actor.get_component_by_class(unreal.SkeletalMeshComponent)
+
+                                if mesh_component:
+                                    # Check if this slot has the master material
+                                    slot_index = mat_info['slot']
+                                    current_mat = mesh_component.get_material(slot_index)
+                                    if current_mat == base_material:
+                                        mesh_component.set_material(slot_index, new_instance)
+                                        replaced_count += 1
+                                        unreal.log(f"✅ Replaced master on {actor.get_name()} slot {slot_index}")
+                    except Exception as e:
+                        unreal.log_warning(f"⚠️ Failed to replace on actor: {e}")
+
+            # Update the material list to reflect the change
+            for mat_info in self.current_materials:
+                if mat_info['instance'] == base_material:
+                    mat_info['instance'] = new_instance
+                    mat_info['type'] = 'Instance'
+                    mat_info['name'] = new_instance.get_name()
+
+            # Reload the UI with the new instance
+            self.is_master_material = False
+            self.hide_master_material_warning()
+            self.load_material_instance(new_instance)
+
+            # Refresh the dropdowns
+            self.load_materials(self.current_materials)
+
+            unreal.log(f"🎉 Created instance: {mi_name} and replaced on {replaced_count} slot(s)")
+            self.status_label.setText(f"✓ Created instance, replaced {replaced_count} slot(s)")
+
+            return new_instance
+
+        except Exception as e:
+            unreal.log_error(f"❌ Failed to create and replace instance: {e}")
+            self.status_label.setText("❌ Failed to create instance")
+            return None
+
+    def create_instance_from_master(self):
+        """Auto-create material instance from master material (legacy method for compatibility)"""
+        try:
+            base_material = self.current_instance
+
+            # Generate unique name
+            mi_name = f"MI_{base_material.get_name()}_Auto"
+            mi_path = "/Game/Materials/"
+
+            # Create the instance
+            atools = unreal.AssetToolsHelpers.get_asset_tools()
+            mi_factory = unreal.MaterialInstanceConstantFactoryNew()
+
             new_instance = atools.create_asset(
                 mi_name, mi_path, unreal.MaterialInstanceConstant, mi_factory
             )
-            
+
             # Set parent
             unreal.MaterialEditingLibrary.set_material_instance_parent(new_instance, base_material)
-            
+
             # Switch editor to the new instance
             self.current_instance = new_instance
             self.is_master_material = False
             self.hide_master_material_warning()
-            
+
             # Reload the interface for the new instance
             self.load_material_instance(new_instance)
-            
+
             unreal.log(f"✅ Created material instance: {mi_name}")
-            
+
             return new_instance
-            
+
         except Exception as e:
             unreal.log_error(f"❌ Failed to create instance: {e}")
             return None
@@ -1229,83 +1436,112 @@ class MaterialInstanceEditor(QWidget):
                 widget.reset_to_original()
     
     def apply_styles(self):
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #2b2b2b;
+        """Apply dark theme with blue accents matching FBX importer style"""
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: #1e1e1e;
                 color: #ffffff;
-            }
-            
-            QMainWindow, QDialog {
-                background-color: #2b2b2b;
-                border: 1px solid #3c3c3c;
-            }
-            
-            #Title {
-                font-size: 14px;
+            }}
+
+            QWidget {{
+                background-color: #1e1e1e;
+                color: #ffffff;
+            }}
+
+            #Title {{
+                font-size: 16px;
                 font-weight: bold;
                 color: #ffffff;
                 margin-bottom: 5px;
-            }
-            
-            #MasterWarning {
-                background-color: #ff4444;
-                color: white;
-                padding: 8px;
-                border-radius: 4px;
+            }}
+
+            #StatusLabel {{
+                font-size: 10px;
+                color: {self.theme_color};
+                font-style: italic;
+                padding-left: 10px;
+            }}
+
+            #SectionHeader {{
+                font-size: 12px;
                 font-weight: bold;
-                text-align: center;
-                margin: 5px 0;
-            }
-            
-            #MaterialDropdown {
-                font-size: 11px;
                 color: #ffffff;
-                background-color: #1e1e1e;
-                border: 1px solid #3c3c3c;
-                border-radius: 4px;
-                padding: 5px;
-                margin-bottom: 10px;
-            }
-            
-            #CloseButton {
-                background-color: #ff4444;
-                color: white;
-                border: none;
-                border-radius: 15px;
-                font-size: 16px;
-                font-weight: bold;
-            }
-            
-            #CloseButton:hover {
-                background-color: #ff6666;
-            }
-            
-            #OpenMasterButton {
-                background-color: #0d3c87;
-                color: white;
-                border: 1px solid #0a2d65;
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-weight: bold;
+                background-color: #2b2b2b;
+                padding: 8px 12px;
+                border-left: 3px solid {self.theme_color};
+                border-radius: 3px;
+                margin: 5px 0;
+            }}
+
+            #FieldLabel {{
+                color: #cccccc;
                 font-size: 11px;
+                font-weight: bold;
+            }}
+
+            #InfoLabel {{
+                color: #999999;
+                font-size: 10px;
+                font-style: italic;
+                padding: 5px 10px;
+                background-color: #2b2b2b;
+                border-radius: 3px;
+            }}
+
+            #Separator {{
+                background-color: #3c3c3c;
+                max-height: 1px;
+                margin: 5px 0;
+            }}
+
+            #Dropdown {{
+                background-color: #2b2b2b;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                padding: 6px 10px;
+                font-size: 11px;
+                min-height: 20px;
+            }}
+
+            #Dropdown:hover {{
+                border: 1px solid {self.theme_color};
+                background-color: #333333;
+            }}
+
+            #Dropdown::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+
+            #Dropdown::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #cccccc;
                 margin-right: 5px;
-            }
-            
-            #OpenMasterButton:hover {
-                background-color: #1048a0;
-            }
-            
-            #ScrollArea {
+            }}
+
+            QComboBox#Dropdown QAbstractItemView {{
+                background-color: #2b2b2b;
+                border: 1px solid {self.theme_color};
+                selection-background-color: {self.theme_color};
+                selection-color: white;
+                color: #ffffff;
+                padding: 5px;
+            }}
+
+            #ScrollArea {{
                 border: 1px solid #3c3c3c;
                 border-radius: 5px;
-                background-color: #1e1e1e;
-            }
-            
-            #CollapsibleSection {
+                background-color: #2b2b2b;
+            }}
+
+            #CollapsibleSection {{
                 margin: 2px;
-            }
-            
-            #SectionHeader {
+            }}
+
+            QPushButton#SectionHeader {{
                 text-align: left;
                 padding: 8px 12px;
                 background-color: #404040;
@@ -1314,81 +1550,133 @@ class MaterialInstanceEditor(QWidget):
                 color: #ffffff;
                 font-weight: bold;
                 font-size: 11px;
-            }
-            
-            #SectionHeader:hover {
+            }}
+
+            QPushButton#SectionHeader:hover {{
                 background-color: #4a4a4a;
-            }
-            
-            #SectionHeader:checked {
-                background-color: #0d3c87;
-            }
-            
-            #ParamLabel {
+            }}
+
+            QPushButton#SectionHeader:checked {{
+                background-color: {self.theme_color};
+            }}
+
+            #ParamLabel {{
                 color: #cccccc;
                 font-size: 10px;
                 font-weight: bold;
                 padding: 2px;
-            }
-            
-            #RGBLabel {
+            }}
+
+            #RGBLabel {{
                 color: #999999;
                 font-size: 9px;
                 font-family: monospace;
-            }
-            
-            QSplitter::handle {
+            }}
+
+            QSplitter::handle {{
                 background-color: #555555;
                 width: 2px;
                 margin: 2px;
-            }
-            
-            QSplitter::handle:hover {
-                background-color: #0d3c87;
-            }
-            
-            #ResetButton {
+            }}
+
+            QSplitter::handle:hover {{
+                background-color: {self.theme_color};
+            }}
+
+            #ResetButton {{
                 background-color: #606060;
                 border: 1px solid #777;
                 border-radius: 3px;
                 color: #ffffff;
                 font-size: 12px;
                 font-weight: bold;
-            }
-            
-            #ResetButton:hover {
+            }}
+
+            #ResetButton:hover {{
                 background-color: #707070;
-            }
-            
-            #ActionButton {
-                background-color: #0d3c87;
-                border: 1px solid #0a2d65;
-                border-radius: 4px;
+            }}
+
+            #ActionButton {{
+                background-color: {self.theme_color};
+                border: 1px solid {self.theme_color_dark};
+                border-radius: 5px;
                 color: white;
-                padding: 6px 12px;
+                padding: 10px 15px;
                 font-weight: bold;
-                font-size: 11px;
-            }
-            
-            #ActionButton:hover {
-                background-color: #1048a0;
-            }
-            
-            QScrollBar:vertical {
+                font-size: 12px;
+                min-height: 30px;
+            }}
+
+            #ActionButton:hover {{
+                background-color: {self.theme_color_light};
+            }}
+
+            #ActionButton:pressed {{
+                background-color: {self.theme_color_dark};
+            }}
+
+            #SecondaryButton {{
+                background-color: #404040;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #ffffff;
+                padding: 6px 12px;
+                font-size: 10px;
+            }}
+
+            #SecondaryButton:hover {{
+                background-color: #505050;
+                border: 1px solid {self.theme_color};
+            }}
+
+            #MasterWarning {{
+                background-color: #ff4444;
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: bold;
+                text-align: center;
+                margin: 5px 0;
+            }}
+
+            QScrollBar:vertical {{
                 background-color: #2b2b2b;
                 width: 12px;
                 border-radius: 6px;
-            }
-            
-            QScrollBar::handle:vertical {
+            }}
+
+            QScrollBar::handle:vertical {{
                 background-color: #555555;
                 border-radius: 6px;
                 min-height: 20px;
-            }
-            
-            QScrollBar::handle:vertical:hover {
-                background-color: #666666;
-            }
+            }}
+
+            QScrollBar::handle:vertical:hover {{
+                background-color: {self.theme_color};
+            }}
+
+            QCheckBox {{
+                color: #cccccc;
+                font-size: 11px;
+                spacing: 8px;
+            }}
+
+            QCheckBox::indicator {{
+                width: 18px;
+                height: 18px;
+                border: 2px solid #555;
+                border-radius: 3px;
+                background-color: #2b2b2b;
+            }}
+
+            QCheckBox::indicator:hover {{
+                border: 2px solid {self.theme_color};
+            }}
+
+            QCheckBox::indicator:checked {{
+                background-color: {self.theme_color};
+                border: 2px solid {self.theme_color_dark};
+            }}
         """)
 
 # ========================================

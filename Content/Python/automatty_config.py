@@ -418,19 +418,35 @@ def show_material_editor():
     try:
         if not ensure_unreal_qt():
             return False
-        
+
         import unreal_qt
         unreal_qt.setup()
-        
+
         import automatty_material_instance_editor
         import importlib
         importlib.reload(automatty_material_instance_editor)
-        
+
         automatty_material_instance_editor.show_editor_for_selection()
         return True
-        
+
     except Exception as e:
         unreal.log_error(f"❌ Material editor failed: {e}")
+        return False
+
+def open_main_widget():
+    """Open the AutoMatty main widget - simple wrapper for C++ toolbar"""
+    try:
+        subsystem = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
+        blueprint = unreal.EditorAssetLibrary.load_asset("/AutoMatty/Blueprints/EUW_AutoMatty")
+        if blueprint:
+            subsystem.spawn_and_register_tab(blueprint)
+            unreal.log("🎯 AutoMatty main widget opened")
+            return True
+        else:
+            unreal.log_error("❌ Could not load EUW_AutoMatty blueprint")
+            return False
+    except Exception as e:
+        unreal.log_error(f"❌ Failed to open widget: {e}")
         return False
 
 # ========================================
@@ -847,77 +863,6 @@ def initialize_widget_on_startup():
         unreal.log_error(f"❌ Widget initialization failed: {e}")
         return False
 
-def debug_widget_loading():
-    """Debug why settings aren't loading into widget"""
-    config_path = AutoMattyConfig.get_config_path()
-    unreal.log(f"🔍 Config path: {config_path}")
-    
-    import os
-    if os.path.exists(config_path):
-        unreal.log(f"✅ Config file exists")
-        config = AutoMattyConfig.load_config()
-        unreal.log(f"📄 Config contents: {config}")
-    else:
-        unreal.log(f"❌ Config file doesn't exist")
-        return
-    
-    widget = WidgetManager.get_widget()
-    if widget:
-        unreal.log(f"✅ Widget found: {widget}")
-    else:
-        unreal.log(f"❌ Widget NOT found")
-        return
-    
-    for setting_key, config_info in SETTINGS_CONFIG.items():
-        widget_property = config_info.get("widget_property")
-        unreal.log(f"🔍 Checking property: {widget_property}")
-        
-        try:
-            input_widget = widget.get_editor_property(widget_property)
-            if input_widget:
-                unreal.log(f"✅ Found widget property: {widget_property}")
-                current_text = input_widget.get_text()
-                unreal.log(f"📝 Current text: '{current_text}'")
-            else:
-                unreal.log(f"❌ Widget property NOT found: {widget_property}")
-        except Exception as e:
-            unreal.log(f"❌ Error accessing {widget_property}: {e}")
-
-def force_debug_load():
-    """Force load with detailed logging"""
-    unreal.log("🚀 Starting debug load...")
-    
-    for setting_key in SETTINGS_CONFIG.keys():
-        value = AutoMattyConfig.get_setting(setting_key)
-        unreal.log(f"📊 {setting_key}: '{value}'")
-    
-    debug_widget_loading()
-    
-    unreal.log("🔧 Attempting manual load...")
-    widget = WidgetManager.get_widget()
-    if widget:
-        test_fields = [
-            ("material_path", "MaterialPathInput"),
-            ("texture_path", "TexturePathInput"), 
-            ("material_prefix", "MaterialPrefixInput")
-        ]
-        
-        for setting_key, widget_property in test_fields:
-            try:
-                value = AutoMattyConfig.get_setting(setting_key)
-                input_widget = widget.get_editor_property(widget_property)
-                
-                unreal.log(f"🔍 {setting_key}: value='{value}', widget={input_widget}")
-                
-                if input_widget and value:
-                    input_widget.set_text(str(value))
-                    new_text = input_widget.get_text()
-                    unreal.log(f"✅ Set {widget_property}: '{value}' → result: '{new_text}'")
-                else:
-                    unreal.log(f"❌ Failed {widget_property} - widget: {input_widget}, value: '{value}'")
-                    
-            except Exception as e:
-                unreal.log(f"❌ Error setting {setting_key}: {e}")
 
 def open_material_path_in_browser():
     """Open material path in content browser"""
